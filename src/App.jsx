@@ -212,7 +212,7 @@ function Select({ value, onChange, options }) {
   );
 }
 
-function SectionHeader({ color = "blue", title, subtitle }) {
+function SectionHeader({ color = "orange", title, subtitle }) {
   const colors = {
     blue:   "bg-blue-700 text-white",
     orange: "bg-orange-600 text-white",
