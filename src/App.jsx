@@ -932,7 +932,7 @@ const SAMPLE_PEOPLE=[
   {id:10,name:"Ben Morgan",email:"b.morgan@essentialenergy.com.au",role:"Estimator",team:"Zone Substation",canReview:false,active:false},
 ];
 
-function WBSManager() {
+function WBSManager({ equipSel, setEquipSel }) {
   const {wbs,rates,loading,error} = useData();
   const [tab, setTab] = useState("items");
   const [search, setSearch] = useState("");
@@ -954,9 +954,11 @@ function WBSManager() {
     setNewP({name:"",email:"",role:"Estimator",team:"Zone Substation",canReview:false});
   };
 
+  const equipSelectedCount = Object.values(equipSel).filter(q=>parseFloat(q)>0).length;
   const tabs=[
     {id:"items",label:"📋 WBS Items",count:wbs.length},
     {id:"rates",label:"💲 Resource Rates",count:rates.length},
+    {id:"catalogue",label:"🔧 Equipment Catalogue",count:equipSelectedCount>0?`${equipSelectedCount} sel`:null},
     {id:"scaling",label:"📐 Comm Scaling",count:WBS_PROFILES.length},
     {id:"people",label:"👥 People & Roles",count:people.filter(p=>p.active).length},
   ];
@@ -1055,6 +1057,11 @@ function WBSManager() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Equipment Catalogue */}
+      {tab==="catalogue"&&(
+        <EquipmentCatalogueManager equipSel={equipSel} setEquipSel={setEquipSel}/>
       )}
 
       {/* Commissioning Scaling */}
@@ -1175,275 +1182,486 @@ const TYPE_COLORS = {
   COMMS: { badge:"bg-purple-100 text-purple-700 border border-purple-300",icon:"📶", label:"Communications"  },
 };
 
-function EquipmentScreen({ equipSel, setEquipSel, isCommercial }) {
+// ── EQUIPMENT SCREEN (Estimation Tool tab) ───────────────────────
+// Shows ONLY items selected for this investment — procurement report view
+function EquipmentScreen({ equipSel, setEquipSel, isCommercial, inv }) {
   const { equipment, loading } = useData();
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [catFilter,  setCatFilter]  = useState("All");
-  const [search,     setSearch]     = useState("");
-  const [view,       setView]       = useState("catalogue"); // catalogue | selected
+  const ANS_mat = isCommercial ? (1 + ANS_MAT) : 1;
 
-  const updQty = (id, val) => setEquipSel(p=>({...p,[id]:val}));
+  const selected = useMemo(()=>
+    equipment.filter(e => parseFloat(equipSel[e.id]||"0") > 0)
+  ,[equipment, equipSel]);
 
-  // Unique categories for filter
-  const categories = useMemo(()=>{
-    const cats = [...new Set(equipment.filter(e=>typeFilter==="All"||e.type===typeFilter).map(e=>e.category).filter(Boolean))].sort();
-    return cats;
-  },[equipment, typeFilter]);
-
-  const filtered = useMemo(()=>{
-    return equipment.filter(e=>{
-      const mt = typeFilter==="All" || e.type===typeFilter;
-      const mc = catFilter==="All"  || e.category===catFilter;
-      const ms = !search || e.description?.toLowerCase().includes(search.toLowerCase())
-        || e.wbs_code?.toLowerCase().includes(search.toLowerCase())
-        || e.make_model?.toLowerCase().includes(search.toLowerCase())
-        || e.category?.toLowerCase().includes(search.toLowerCase());
-      return mt && mc && ms;
+  const selByType = useMemo(()=>{
+    const m = {};
+    ["PCE","LLT","SCADA","COMMS"].forEach(t => {
+      m[t] = selected.filter(e => e.type === t);
     });
-  },[equipment, typeFilter, catFilter, search]);
+    return m;
+  },[selected]);
 
-  const selected = equipment.filter(e=>parseFloat(equipSel[e.id]||"0")>0);
-  const selTotal = selected.reduce((a,e)=>a+(parseFloat(equipSel[e.id]||"0")*e.price),0);
-  const ANS_mat  = isCommercial ? (1+0.2686) : 1;
-  const selTotalComm = selected.reduce((a,e)=>a+(parseFloat(equipSel[e.id]||"0")*e.price*ANS_mat),0);
+  const grandTotal     = selected.reduce((a,e)=>a + parseFloat(equipSel[e.id]||"0")*e.price, 0);
+  const grandTotalComm = selected.reduce((a,e)=>a + parseFloat(equipSel[e.id]||"0")*e.price*ANS_mat, 0);
+  const lltItems       = selected.filter(e=>e.is_llt);
 
   if (loading) return (
     <div className="flex-1 flex items-center justify-center text-gray-400">
-      <div className="text-center"><div className="text-2xl animate-spin mb-2">⟳</div><div>Loading equipment catalogue…</div></div>
+      <div className="text-center"><div className="text-2xl animate-spin mb-2">⟳</div><div>Loading catalogue…</div></div>
+    </div>
+  );
+
+  if (selected.length === 0) return (
+    <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="text-center text-gray-400">
+        <div className="text-5xl mb-4">📦</div>
+        <div className="text-sm font-semibold text-gray-500">No equipment selected for this investment</div>
+        <div className="text-xs mt-2 text-gray-400">Go to <span className="font-semibold">WBS Manager → Equipment Catalogue</span> to browse and select items</div>
+      </div>
     </div>
   );
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-gray-50">
+    <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
+      <div className="max-w-6xl mx-auto space-y-4">
 
-      {/* LEFT — filters */}
-      <div className="w-52 bg-white border-r flex flex-col flex-shrink-0 overflow-hidden">
-        <div className="bg-teal-700 text-white px-3 py-2 flex-shrink-0">
-          <div className="text-xs font-bold uppercase tracking-wide">🔧 Equipment Catalogue</div>
-          <div className="text-xs opacity-75 mt-0.5">{equipment.length} items total</div>
-        </div>
-
-        {/* Type filter */}
-        <div className="px-3 py-2 border-b flex-shrink-0">
-          <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Type</div>
-          {["All","PCE","LLT","SCADA","COMMS"].map(t=>(
-            <button key={t} onClick={()=>{setTypeFilter(t);setCatFilter("All");}}
-              className={`w-full text-left flex items-center justify-between px-2 py-1.5 rounded text-xs mb-0.5 transition-colors ${
-                typeFilter===t?"bg-teal-600 text-white":"text-gray-700 hover:bg-gray-100"}`}>
-              <span className="flex items-center gap-1.5">
-                {t!=="All"&&<span>{TYPE_COLORS[t]?.icon}</span>}
-                {t==="All"?"All Types":TYPE_COLORS[t]?.label}
-              </span>
-              <span className={`text-xs px-1 rounded font-mono ${typeFilter===t?"bg-teal-500 text-white":"bg-gray-100 text-gray-500"}`}>
-                {t==="All"?equipment.length:equipment.filter(e=>e.type===t).length}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Category filter */}
-        {categories.length > 0 && (
-          <div className="px-3 py-2 flex-1 overflow-y-auto">
-            <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Category</div>
-            <button onClick={()=>setCatFilter("All")}
-              className={`w-full text-left px-2 py-1 rounded text-xs mb-0.5 ${catFilter==="All"?"bg-teal-50 text-teal-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>
-              All Categories
-            </button>
-            {categories.map(c=>(
-              <button key={c} onClick={()=>setCatFilter(c)}
-                className={`w-full text-left px-2 py-1 rounded text-xs mb-0.5 truncate ${catFilter===c?"bg-teal-50 text-teal-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>
-                {c}
-              </button>
-            ))}
+        {/* Report header */}
+        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="text-base font-bold text-gray-900">Equipment Schedule — Procurement Report</div>
+              <div className="text-xs text-gray-400 mt-0.5">{inv.name || "Unnamed Investment"} · {inv.number} · Rev {inv.revision}</div>
+              <div className="text-xs text-gray-400">Generated {new Date().toLocaleDateString("en-AU",{dateStyle:"long"})}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-gray-500 mb-1">Total Equipment Value</div>
+              <div className="text-xl font-bold text-blue-900">{fmt(grandTotal)}</div>
+              {isCommercial && <div className="text-sm font-bold text-orange-700">{fmt(grandTotalComm)} commercial</div>}
+              <div className="text-xs text-gray-400 mt-1">{selected.length} item{selected.length!==1?"s":""} across {Object.values(selByType).filter(a=>a.length>0).length} categories</div>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* MAIN */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Toolbar */}
-        <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
-          <div className="flex border border-gray-200 rounded overflow-hidden">
-            <button onClick={()=>setView("catalogue")}
-              className={`text-xs px-3 py-1.5 ${view==="catalogue"?"bg-teal-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
-              Catalogue ({filtered.length})
-            </button>
-            <button onClick={()=>setView("selected")}
-              className={`text-xs px-3 py-1.5 ${view==="selected"?"bg-teal-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
-              Selected ({selected.length})
-            </button>
-          </div>
-          <input value={search} onChange={e=>setSearch(e.target.value)}
-            placeholder="Search description, WBS, part number…"
-            className="border border-gray-300 rounded px-2 py-1.5 text-xs w-72 focus:outline-none focus:ring-1 focus:ring-teal-400"/>
-          {search && <button onClick={()=>setSearch("")} className="text-xs text-gray-400 hover:text-gray-600">✕ Clear</button>}
-          {selected.length>0&&(
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-gray-500">Selected total:</span>
-              <span className="font-bold text-blue-800 text-xs">{fmt(selTotal)}</span>
-              {isCommercial&&<span className="font-bold text-orange-700 text-xs">→ {fmt(selTotalComm)} comm</span>}
+          {lltItems.length > 0 && (
+            <div className="mt-3 bg-red-50 border border-red-200 rounded p-2 flex items-center gap-2">
+              <span className="text-red-500 text-sm">⏱</span>
+              <span className="text-xs text-red-700 font-semibold">
+                {lltItems.length} Long Lead Time item{lltItems.length!==1?"s":""} — early procurement recommended
+              </span>
+              <span className="text-xs text-red-500 ml-2">{lltItems.map(e=>e.description.split(" ").slice(0,4).join(" ")).join(" · ")}</span>
             </div>
           )}
         </div>
 
-        {/* CATALOGUE VIEW */}
-        {view==="catalogue" && (
-          <div className="flex-1 overflow-y-auto">
-            {filtered.length===0?(
-              <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No items match filters</div>
-            ):(
+        {/* One table per equipment type */}
+        {["LLT","PCE","SCADA","COMMS"].map(type => {
+          const items = selByType[type];
+          if (!items?.length) return null;
+          const tc = TYPE_COLORS[type];
+          const typeTotal     = items.reduce((a,e)=>a + parseFloat(equipSel[e.id]||"0")*e.price, 0);
+          const typeTotalComm = items.reduce((a,e)=>a + parseFloat(equipSel[e.id]||"0")*e.price*ANS_mat, 0);
+          return (
+            <div key={type} className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b"
+                style={{background: type==="LLT"?"#fef2f2":type==="PCE"?"#fffbeb":type==="SCADA"?"#eff6ff":"#faf5ff"}}>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{tc.icon}</span>
+                  <div>
+                    <span className="font-bold text-sm text-gray-900">{tc.label} Equipment</span>
+                    {type==="LLT" && <span className="ml-2 text-xs text-red-600 font-medium">— Order immediately, lead time &gt;20 weeks</span>}
+                  </div>
+                  <span className="text-xs text-gray-400 ml-1">({items.length} item{items.length!==1?"s":""})</span>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-sm text-gray-900">{fmt(typeTotal)}</div>
+                  {isCommercial && <div className="text-xs font-bold text-orange-700">{fmt(typeTotalComm)} comm</div>}
+                </div>
+              </div>
               <table className="w-full text-xs">
-                <thead className="bg-gray-50 border-b sticky top-0 z-10">
+                <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500 w-16">Type</th>
                     <th className="text-left px-3 py-2 font-semibold text-gray-500 w-32">WBS Code</th>
                     <th className="text-left px-3 py-2 font-semibold text-gray-500">Description</th>
                     <th className="text-left px-3 py-2 font-semibold text-gray-500 w-28">Category</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500 w-28">Make / Part</th>
-                    <th className="text-left px-3 py-2 font-semibold text-gray-500 w-20">Voltage</th>
-                    <th className="text-right px-3 py-2 font-semibold text-gray-500 w-24">Price</th>
-                    <th className="text-center px-3 py-2 font-semibold text-orange-700 w-20">Quantity</th>
-                    <th className="text-right px-3 py-2 font-semibold text-blue-700 w-24">Line Total</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-500 w-36">Make / Part No.</th>
+                    {type==="PCE"||type==="LLT" ? <th className="text-left px-3 py-2 font-semibold text-gray-500 w-24">Contract No.</th> : null}
+                    {type==="PCE"||type==="LLT" ? <th className="text-center px-3 py-2 font-semibold text-red-600 w-20">Lead Time</th> : null}
+                    <th className="text-right px-3 py-2 font-semibold text-gray-500 w-24">Unit Price</th>
+                    <th className="text-center px-3 py-2 font-semibold text-orange-700 w-14">Qty</th>
+                    <th className="text-right px-3 py-2 font-semibold text-teal-700 w-24">Line Total</th>
+                    {isCommercial && <th className="text-right px-3 py-2 font-semibold text-orange-700 w-24">Commercial</th>}
+                    <th className="w-8 px-2"/>
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((item,idx)=>{
-                    const qty    = equipSel[item.id]||"";
-                    const qtyNum = parseFloat(qty)||0;
-                    const hasQty = qtyNum > 0;
-                    const lineTotal = qtyNum * item.price;
-                    const tc = TYPE_COLORS[item.type]||{badge:"bg-gray-100 text-gray-500",icon:"•"};
+                  {items.map(item => {
+                    const qty    = parseFloat(equipSel[item.id]||"0");
+                    const lt     = item.line_total ?? qty * item.price;
+                    const ltComm = lt * ANS_mat;
                     return (
-                      <tr key={item.id} className={`border-b transition-colors ${hasQty?"bg-teal-50 border-l-4 border-l-teal-500":idx%2===0?"bg-white":"bg-gray-50"} hover:bg-teal-50`}>
-                        <td className="px-3 py-1.5">
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${tc.badge}`}>
-                            {tc.icon} {item.type}
-                          </span>
+                      <tr key={item.id} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-2 font-mono text-blue-600 whitespace-nowrap">{item.wbs_code||<span className="text-gray-300 italic">TBA</span>}</td>
+                        <td className="px-3 py-2 text-gray-800">
+                          <div className="font-medium">{item.description}</div>
+                          {item.comments && <div className="text-gray-400 text-xs mt-0.5 truncate max-w-xs">{item.comments}</div>}
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-blue-600 whitespace-nowrap">{item.wbs_code}</td>
-                        <td className="px-3 py-1.5 text-gray-800 max-w-xs">
-                          <div className="truncate font-medium">{item.description}</div>
-                          {item.contract_no&&item.contract_no!==item.item_no&&(
-                            <div className="text-gray-400 text-xs">Contract: {item.contract_no}</div>
-                          )}
+                        <td className="px-3 py-2 text-gray-500">{item.category}</td>
+                        <td className="px-3 py-2 text-gray-500 font-mono text-xs">{item.make_model}</td>
+                        {type==="PCE"||type==="LLT" ? <td className="px-3 py-2 text-gray-500 font-mono text-xs">{item.contract_no}</td> : null}
+                        {type==="PCE"||type==="LLT" ? (
+                          <td className="px-3 py-2 text-center">
+                            {item.lead_time_weeks > 0 && (
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${item.is_llt?"bg-red-100 text-red-700":"bg-gray-100 text-gray-500"}`}>
+                                {item.lead_time_weeks}w
+                              </span>
+                            )}
+                          </td>
+                        ) : null}
+                        <td className="px-3 py-2 text-right font-medium text-gray-800">
+                          {item.price>0 ? fmt(item.price) : <span className="text-orange-500">POA</span>}
                         </td>
-                        <td className="px-3 py-1.5 text-gray-500 truncate">{item.category}</td>
-                        <td className="px-3 py-1.5 text-gray-500 font-mono text-xs truncate">{item.make_model}</td>
-                        <td className="px-3 py-1.5 text-gray-500">{item.voltage}</td>
-                        <td className="px-3 py-1.5 text-right font-medium text-gray-800 whitespace-nowrap">
-                          {item.price>0?fmt(item.price):<span className="text-orange-500 font-medium">POA</span>}
+                        <td className="px-3 py-2 text-center font-bold text-orange-700">{qty}</td>
+                        <td className="px-3 py-2 text-right font-bold text-teal-700">
+                          {item.price>0 ? fmt(lt) : <span className="text-orange-500">POA</span>}
                         </td>
-                        <td className="px-3 py-1.5">
-                          <div className="flex justify-center">
-                            <input type="number" min="0" value={qty}
-                              onChange={e=>updQty(item.id,e.target.value)}
-                              placeholder="0"
-                              className={`w-16 text-center border rounded py-0.5 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-teal-400 ${hasQty?"border-teal-400 bg-teal-50 text-teal-800":"border-gray-300 text-gray-500"}`}/>
-                          </div>
-                        </td>
-                        <td className="px-3 py-1.5 text-right font-bold">
-                          {hasQty&&item.price>0
-                            ?<span className="text-teal-700">{fmt(lineTotal)}</span>
-                            :hasQty&&item.price===0
-                              ?<span className="text-orange-500 text-xs">POA</span>
-                              :<span className="text-gray-300">–</span>
-                          }
+                        {isCommercial && (
+                          <td className="px-3 py-2 text-right font-bold text-orange-700">
+                            {item.price>0 ? fmt(ltComm) : <span className="text-orange-500">POA</span>}
+                          </td>
+                        )}
+                        <td className="px-2 py-2 text-center">
+                          <button onClick={()=>setEquipSel(p=>({...p,[item.id]:"0"}))}
+                            className="text-red-300 hover:text-red-600 text-xs" title="Remove from investment">✕</button>
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
+                <tfoot className="bg-gray-50 border-t border-gray-200">
+                  <tr>
+                    <td colSpan={type==="PCE"||type==="LLT" ? 6 : 4} className="px-3 py-1.5"/>
+                    <td className="px-3 py-1.5 text-right text-xs font-bold text-gray-600">Subtotal</td>
+                    <td className="px-3 py-1.5 text-center text-xs font-bold text-orange-700">
+                      {items.reduce((a,e)=>a+parseFloat(equipSel[e.id]||"0"),0)}
+                    </td>
+                    <td className="px-3 py-1.5 text-right text-xs font-bold text-teal-700">{fmt(typeTotal)}</td>
+                    {isCommercial && <td className="px-3 py-1.5 text-right text-xs font-bold text-orange-700">{fmt(typeTotalComm)}</td>}
+                    <td/>
+                  </tr>
+                </tfoot>
               </table>
-            )}
-          </div>
-        )}
+            </div>
+          );
+        })}
 
-        {/* SELECTED VIEW */}
-        {view==="selected" && (
-          <div className="flex-1 overflow-y-auto">
-            {selected.length===0?(
-              <div className="flex items-center justify-center h-48 text-center text-gray-400">
-                <div>
-                  <div className="text-3xl mb-2">🔧</div>
-                  <div className="text-sm font-semibold">No equipment selected yet</div>
-                  <div className="text-xs mt-1">Switch to Catalogue view and enter quantities</div>
-                </div>
+        {/* Grand total */}
+        <div className="bg-teal-800 rounded-lg p-4 text-white flex items-center justify-between">
+          <div>
+            <div className="font-bold text-sm">Total Equipment Value — {inv.name||"Investment"}</div>
+            <div className="text-xs opacity-75 mt-0.5">{selected.length} items · Escalated prices as at catalogue date</div>
+            {isCommercial && <div className="text-xs opacity-75">Commercial includes ANS materials margin {(ANS_MAT*100).toFixed(1)}%</div>}
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold">{fmt(grandTotal)}</div>
+            {isCommercial && <div className="text-sm font-bold text-orange-300">{fmt(grandTotalComm)} commercial</div>}
+          </div>
+        </div>
+
+        {/* Procurement notes */}
+        <div className="bg-white rounded-lg border border-gray-200 p-3 text-xs text-gray-500">
+          <span className="font-semibold text-gray-700">Procurement Notes: </span>
+          This schedule is for procurement planning purposes. All prices are escalated estimates from the period contract or supplier quotation.
+          POA items require individual quotation. LLT items should be ordered immediately upon investment approval.
+          Prices are exclusive of GST. Confirm current contract pricing with Procurement before issuing purchase orders.
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+
+// ── EQUIPMENT CATALOGUE MANAGER (WBS Manager tab) ────────────────
+// Admin view — full catalogue, price editing, WBS assignment, add new items
+function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
+  const { equipment, loading } = useData();
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [catFilter,  setCatFilter]  = useState("All");
+  const [search,     setSearch]     = useState("");
+  const [editing,    setEditing]    = useState(null); // item id being edited
+  const [editVals,   setEditVals]   = useState({});
+  const [showAdd,    setShowAdd]    = useState(false);
+  const [newItem,    setNewItem]    = useState({type:"PCE",description:"",category:"",make_model:"",wbs_code:"",contract_no:"",price:"",lead_time_weeks:"",unit:"EA",comments:""});
+  const [localItems, setLocalItems] = useState(null); // overrides for edited prices
+
+  // Use localItems if any edits have been made, else use context equipment
+  const allItems = useMemo(()=> localItems || equipment, [localItems, equipment]);
+
+  const categories = useMemo(()=>[
+    ...new Set(allItems.filter(e=>typeFilter==="All"||e.type===typeFilter).map(e=>e.category).filter(Boolean))
+  ].sort(),[allItems, typeFilter]);
+
+  const filtered = useMemo(()=>allItems.filter(e=>{
+    const mt = typeFilter==="All" || e.type===typeFilter;
+    const mc = catFilter==="All"  || e.category===catFilter;
+    const ms = !search || e.description?.toLowerCase().includes(search.toLowerCase())
+      || e.wbs_code?.toLowerCase().includes(search.toLowerCase())
+      || e.make_model?.toLowerCase().includes(search.toLowerCase());
+    return mt && mc && ms;
+  }),[allItems, typeFilter, catFilter, search]);
+
+  const selectedCount = Object.values(equipSel).filter(q=>parseFloat(q)>0).length;
+
+  const startEdit = (item) => {
+    setEditing(item.id);
+    setEditVals({ price: item.price, wbs_code: item.wbs_code, contract_no: item.contract_no||"",
+                  lead_time_weeks: item.lead_time_weeks||"", comments: item.comments||"" });
+  };
+  const saveEdit = (itemId) => {
+    const base = localItems || equipment;
+    setLocalItems(base.map(e => e.id===itemId ? {
+      ...e,
+      price: parseFloat(editVals.price)||e.price,
+      wbs_code: editVals.wbs_code||e.wbs_code,
+      contract_no: editVals.contract_no,
+      lead_time_weeks: parseFloat(editVals.lead_time_weeks)||0,
+      is_llt: parseFloat(editVals.lead_time_weeks)>20,
+      type: parseFloat(editVals.lead_time_weeks)>20 ? "LLT" : (e.source==="SCADA"?"SCADA":e.source==="Comms"?"COMMS":"PCE"),
+      comments: editVals.comments,
+    } : e));
+    setEditing(null);
+  };
+  const addNewItem = () => {
+    if (!newItem.description.trim()) return;
+    const base = localItems || equipment;
+    const id = `CUSTOM-${Date.now()}`;
+    setLocalItems([...base, {
+      ...newItem, id, source:"Custom",
+      price: parseFloat(newItem.price)||0,
+      lead_time_weeks: parseFloat(newItem.lead_time_weeks)||0,
+      is_llt: parseFloat(newItem.lead_time_weeks)>20,
+      type: parseFloat(newItem.lead_time_weeks)>20 ? "LLT" : newItem.type,
+      make_model: newItem.make_model, voltage:"", is_poa: !newItem.price,
+      current_price: parseFloat(newItem.price)||0, escalated_price: parseFloat(newItem.price)||0,
+    }]);
+    setShowAdd(false);
+    setNewItem({type:"PCE",description:"",category:"",make_model:"",wbs_code:"",contract_no:"",price:"",lead_time_weeks:"",unit:"EA",comments:""});
+  };
+
+  if (loading) return <div className="flex-1 flex items-center justify-center text-gray-400 text-sm animate-pulse">Loading catalogue…</div>;
+
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      {/* LEFT — filter sidebar */}
+      <div className="w-48 bg-white border-r flex flex-col flex-shrink-0 overflow-hidden">
+        <div className="bg-teal-800 text-white px-3 py-2 flex-shrink-0">
+          <div className="text-xs font-bold uppercase tracking-wide">Equipment Catalogue</div>
+          <div className="text-xs opacity-75 mt-0.5">{allItems.length} items · {selectedCount} selected</div>
+        </div>
+        <div className="px-3 py-2 border-b flex-shrink-0">
+          <div className="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Type</div>
+          {["All","PCE","LLT","SCADA","COMMS"].map(t=>(
+            <button key={t} onClick={()=>{setTypeFilter(t);setCatFilter("All");}}
+              className={`w-full text-left flex items-center justify-between px-2 py-1 rounded text-xs mb-0.5 ${typeFilter===t?"bg-teal-600 text-white":"text-gray-700 hover:bg-gray-100"}`}>
+              <span>{t==="All"?"All Types":`${TYPE_COLORS[t]?.icon} ${TYPE_COLORS[t]?.label}`}</span>
+              <span className={`text-xs px-1 rounded font-mono ${typeFilter===t?"bg-teal-500 text-white":"bg-gray-100 text-gray-500"}`}>
+                {t==="All"?allItems.length:allItems.filter(e=>e.type===t).length}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="px-3 py-2 flex-1 overflow-y-auto">
+          <div className="text-xs font-semibold text-gray-500 mb-1.5 uppercase tracking-wide">Category</div>
+          <button onClick={()=>setCatFilter("All")}
+            className={`w-full text-left px-2 py-1 rounded text-xs mb-0.5 ${catFilter==="All"?"bg-teal-50 text-teal-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>
+            All Categories
+          </button>
+          {categories.map(c=>(
+            <button key={c} onClick={()=>setCatFilter(c)}
+              className={`w-full text-left px-2 py-1 rounded text-xs mb-0.5 truncate ${catFilter===c?"bg-teal-50 text-teal-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* MAIN */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0">
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search description, WBS, make/part…"
+            className="border border-gray-300 rounded px-2 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-teal-400"/>
+          {search && <button onClick={()=>setSearch("")} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
+          <span className="text-xs text-gray-400">{filtered.length} items</span>
+          <div className="flex-1"/>
+          <button onClick={()=>setShowAdd(s=>!s)}
+            className="text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded font-semibold">
+            {showAdd?"Cancel":"+ Add Item"}
+          </button>
+        </div>
+
+        {/* Add new item form */}
+        {showAdd && (
+          <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex-shrink-0">
+            <div className="text-xs font-bold text-green-800 mb-2 uppercase tracking-wide">Add New Equipment Item</div>
+            <div className="grid grid-cols-6 gap-2 items-end">
+              <div className="col-span-2">
+                <label className="text-xs text-gray-500 block mb-0.5">Description *</label>
+                <input value={newItem.description} onChange={e=>setNewItem(p=>({...p,description:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
               </div>
-            ):(
-              <>
-                {/* Group selected by type */}
-                {["PCE","LLT","SCADA","COMMS"].map(type=>{
-                  const typeItems = selected.filter(e=>e.type===type);
-                  if(!typeItems.length) return null;
-                  const typeTotal = typeItems.reduce((a,e)=>a+parseFloat(equipSel[e.id]||"0")*e.price,0);
-                  const tc = TYPE_COLORS[type];
-                  return (
-                    <div key={type} className="mb-4 mx-4 mt-4 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">{tc.icon}</span>
-                          <span className="font-bold text-sm text-gray-800">{tc.label} Equipment</span>
-                          <span className="text-xs text-gray-400">({typeItems.length} item{typeItems.length!==1?"s":""})</span>
-                        </div>
-                        <span className="font-bold text-sm text-gray-800">{fmt(typeTotal)}</span>
-                      </div>
-                      <table className="w-full text-xs">
-                        <thead className="bg-gray-50 border-b">
-                          <tr>
-                            <th className="text-left px-3 py-2 font-semibold text-gray-500">WBS Code</th>
-                            <th className="text-left px-3 py-2 font-semibold text-gray-500">Description</th>
-                            <th className="text-left px-3 py-2 font-semibold text-gray-500">Category</th>
-                            <th className="text-left px-3 py-2 font-semibold text-gray-500">Make / Part</th>
-                            <th className="text-right px-3 py-2 font-semibold text-gray-500">Unit Price</th>
-                            <th className="text-center px-3 py-2 font-semibold text-orange-700">Qty</th>
-                            <th className="text-right px-3 py-2 font-semibold text-teal-700">Line Total</th>
-                            {isCommercial&&<th className="text-right px-3 py-2 font-semibold text-orange-700">Commercial</th>}
-                            <th className="px-3 py-2 w-10"/>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {typeItems.map(item=>{
-                            const qtyNum = parseFloat(equipSel[item.id]||"0");
-                            const lineTotal = qtyNum * item.price;
-                            const lineTotalComm = lineTotal * ANS_mat;
-                            return (
-                              <tr key={item.id} className="border-b hover:bg-gray-50">
-                                <td className="px-3 py-2 font-mono text-blue-600">{item.wbs_code}</td>
-                                <td className="px-3 py-2 font-medium text-gray-800 max-w-xs truncate">{item.description}</td>
-                                <td className="px-3 py-2 text-gray-500">{item.category}</td>
-                                <td className="px-3 py-2 text-gray-500 font-mono text-xs">{item.make_model}</td>
-                                <td className="px-3 py-2 text-right text-gray-700">{item.price>0?fmt(item.price):"POA"}</td>
-                                <td className="px-3 py-2 text-center font-bold text-orange-700">{qtyNum}</td>
-                                <td className="px-3 py-2 text-right font-bold text-teal-700">{item.price>0?fmt(lineTotal):"POA"}</td>
-                                {isCommercial&&<td className="px-3 py-2 text-right font-bold text-orange-700">{item.price>0?fmt(lineTotalComm):"POA"}</td>}
-                                <td className="px-3 py-2 text-center">
-                                  <button onClick={()=>updQty(item.id,"0")}
-                                    className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  );
-                })}
-
-                {/* Grand total footer */}
-                <div className="mx-4 mb-4 bg-teal-700 rounded-lg p-3 text-white flex items-center justify-between">
-                  <div>
-                    <div className="text-xs opacity-75">Equipment Total ({selected.length} items)</div>
-                    {isCommercial&&<div className="text-xs opacity-75 mt-0.5">Includes ANS materials margin {(0.2686*100).toFixed(1)}%</div>}
-                  </div>
-                  <div className="text-right">
-                    <div className="font-bold text-lg">{fmt(selTotal)}</div>
-                    {isCommercial&&<div className="font-bold text-orange-300">{fmt(selTotalComm)} commercial</div>}
-                  </div>
-                </div>
-              </>
-            )}
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Type</label>
+                <select value={newItem.type} onChange={e=>setNewItem(p=>({...p,type:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-400">
+                  {["PCE","SCADA","COMMS"].map(t=><option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Category</label>
+                <input value={newItem.category} onChange={e=>setNewItem(p=>({...p,category:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Make / Part No.</label>
+                <input value={newItem.make_model} onChange={e=>setNewItem(p=>({...p,make_model:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">WBS Code</label>
+                <input value={newItem.wbs_code} onChange={e=>setNewItem(p=>({...p,wbs_code:e.target.value}))}
+                  placeholder="e.g. 3.2.1.02.1.05"
+                  className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Contract No.</label>
+                <input value={newItem.contract_no} onChange={e=>setNewItem(p=>({...p,contract_no:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Price ($)</label>
+                <input type="number" value={newItem.price} onChange={e=>setNewItem(p=>({...p,price:e.target.value}))}
+                  placeholder="0 = POA"
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-0.5">Lead Time (weeks)</label>
+                <input type="number" value={newItem.lead_time_weeks} onChange={e=>setNewItem(p=>({...p,lead_time_weeks:e.target.value}))}
+                  placeholder=">20 = LLT"
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-gray-500 block mb-0.5">Comments</label>
+                <input value={newItem.comments} onChange={e=>setNewItem(p=>({...p,comments:e.target.value}))}
+                  className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+              </div>
+              <div className="flex items-end">
+                <button onClick={addNewItem} disabled={!newItem.description.trim()}
+                  className="w-full text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1.5 rounded font-semibold">
+                  Add Item
+                </button>
+              </div>
+            </div>
           </div>
         )}
+
+        {/* Catalogue table */}
+        <div className="flex-1 overflow-y-auto">
+          <table className="w-full text-xs">
+            <thead className="bg-gray-50 border-b sticky top-0 z-10">
+              <tr>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500 w-14">Type</th>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500 w-32">WBS Code</th>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500">Description</th>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500 w-24">Category</th>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500 w-28">Make / Part</th>
+                <th className="text-left px-2 py-2 font-semibold text-gray-500 w-24">Contract</th>
+                <th className="text-center px-2 py-2 font-semibold text-red-600 w-16">Lead</th>
+                <th className="text-right px-2 py-2 font-semibold text-gray-500 w-24">Price</th>
+                <th className="text-center px-2 py-2 font-semibold text-orange-700 w-16">Qty</th>
+                <th className="text-center px-2 py-2 font-semibold text-gray-400 w-14">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item, idx) => {
+                const isEd  = editing === item.id;
+                const qty   = equipSel[item.id]||"";
+                const hasQty = parseFloat(qty) > 0;
+                const tc    = TYPE_COLORS[item.type]||{badge:"bg-gray-100 text-gray-500",icon:"•"};
+                return (
+                  <tr key={item.id}
+                    className={`border-b transition-colors ${hasQty?"bg-teal-50 border-l-4 border-l-teal-500":idx%2===0?"bg-white":"bg-gray-50"} hover:bg-teal-50`}>
+                    <td className="px-2 py-1.5">
+                      <span className={`text-xs px-1 py-0.5 rounded font-medium ${tc.badge}`}>{tc.icon}</span>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {isEd
+                        ? <input value={editVals.wbs_code} onChange={e=>setEditVals(p=>({...p,wbs_code:e.target.value}))}
+                            className="w-full border border-blue-300 rounded px-1 py-0.5 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                        : <span className="font-mono text-blue-600">{item.wbs_code||<span className="text-orange-400 italic">TBA</span>}</span>
+                      }
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-800 max-w-xs">
+                      <div className="truncate font-medium">{item.description}</div>
+                      {isEd
+                        ? <input value={editVals.comments} onChange={e=>setEditVals(p=>({...p,comments:e.target.value}))}
+                            placeholder="Comments…"
+                            className="w-full mt-0.5 border border-gray-200 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                        : item.comments && <div className="text-gray-400 text-xs truncate">{item.comments}</div>
+                      }
+                    </td>
+                    <td className="px-2 py-1.5 text-gray-500 truncate">{item.category}</td>
+                    <td className="px-2 py-1.5 text-gray-500 font-mono text-xs truncate">{item.make_model}</td>
+                    <td className="px-2 py-1.5">
+                      {isEd
+                        ? <input value={editVals.contract_no} onChange={e=>setEditVals(p=>({...p,contract_no:e.target.value}))}
+                            className="w-full border border-gray-200 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                        : <span className="text-gray-500 font-mono">{item.contract_no}</span>
+                      }
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      {isEd
+                        ? <input type="number" value={editVals.lead_time_weeks} onChange={e=>setEditVals(p=>({...p,lead_time_weeks:e.target.value}))}
+                            className="w-12 border border-gray-200 rounded px-1 py-0.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                        : item.lead_time_weeks>0 && (
+                          <span className={`px-1 py-0.5 rounded text-xs font-medium ${item.is_llt?"bg-red-100 text-red-700":"bg-gray-100 text-gray-500"}`}>
+                            {item.lead_time_weeks}w
+                          </span>
+                        )
+                      }
+                    </td>
+                    <td className="px-2 py-1.5 text-right font-medium text-gray-800">
+                      {isEd
+                        ? <input type="number" value={editVals.price} onChange={e=>setEditVals(p=>({...p,price:e.target.value}))}
+                            className="w-20 border border-green-300 bg-green-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-green-400"/>
+                        : item.price>0 ? fmt(item.price) : <span className="text-orange-500">POA</span>
+                      }
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex justify-center">
+                        <input type="number" min="0" value={qty}
+                          onChange={e=>setEquipSel(p=>({...p,[item.id]:e.target.value}))}
+                          placeholder="0"
+                          className={`w-14 text-center border rounded py-0.5 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-teal-400
+                            ${hasQty?"border-teal-400 bg-teal-50 text-teal-800":"border-gray-300 text-gray-500"}`}/>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      {isEd
+                        ? <div className="flex gap-1 justify-center">
+                            <button onClick={()=>saveEdit(item.id)} className="text-xs text-green-600 hover:text-green-800 font-semibold">✓</button>
+                            <button onClick={()=>setEditing(null)} className="text-xs text-gray-400 hover:text-gray-600">✕</button>
+                          </div>
+                        : <button onClick={()=>startEdit(item)} className="text-xs text-blue-400 hover:text-blue-700">Edit</button>
+                      }
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {filtered.length===0 && (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-sm">No items match filters</div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1630,13 +1848,13 @@ export default function App() {
                     <EstimationScreen isCommercial={isCommercial} lines={lines} setLines={setLines}/>
                   </div>
                 )}
-                {estTab==="equipment" && <EquipmentScreen equipSel={equipSel} setEquipSel={setEquipSel} isCommercial={isCommercial}/>}
+                {estTab==="equipment" && <EquipmentScreen equipSel={equipSel} setEquipSel={setEquipSel} isCommercial={isCommercial} inv={inv}/>}
                 {estTab==="review"    && <ReviewLines lines={lines} supply={supplyData} isCommercial={isCommercial} equipSel={equipSel}/>}
                 {estTab==="summary"   && <SummaryScreen inv={inv} lines={lines} supply={supplyData} isCommercial={isCommercial} equipSel={equipSel} onSave={saveInvestment} lastSaved={lastSaved}/>}
               </div>
             </>
           )}
-          {appTab==="wbsmanager" && <WBSManager/>}
+          {appTab==="wbsmanager" && <WBSManager equipSel={equipSel} setEquipSel={setEquipSel}/>}
           {appTab==="saved"      && <SavedInvestments onLoad={loadInvestment}/>}
         </div>
       </div>
