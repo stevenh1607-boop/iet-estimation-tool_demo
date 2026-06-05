@@ -9,13 +9,24 @@ import { useState, useMemo, useEffect, useCallback, createContext, useContext, u
 const BASE = import.meta.env.BASE_URL || "/";
 
 // ── DATA CONTEXT ────────────────────────────────────────────────
-const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equipLookup:{}, commLookup:{}, loading:true, error:null });
+const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equipLookup:{}, commLookup:{}, commProfiles:{}, loading:true, error:null });
 function useData() { return useContext(DataCtx); }
 
 // ── HELPERS ─────────────────────────────────────────────────────
 const fmt    = n => n === 0 ? "–" : "$" + Math.round(n).toLocaleString("en-AU");
 const fmtHrs = n => n === 0 ? "–" : n.toLocaleString("en-AU",{minimumFractionDigits:0,maximumFractionDigits:1}) + " hrs";
 const fmtPct = n => (n*100).toFixed(1) + "%";
+
+// Scale factor lookup — inclusive tier ranges
+function getScaleFactor(profiles, profileId, qty) {
+  if (!profileId || !profiles[profileId]) return 1.00;
+  const tiers = profiles[profileId].tiers;
+  for (const tier of tiers) {
+    if (qty >= tier.qty_from && (tier.qty_to === null || qty <= tier.qty_to))
+      return tier.scale;
+  }
+  return 1.00;
+}
 
 // ANS margins
 const ANS_LAB  = 0.20;
@@ -240,7 +251,14 @@ function WBSNavTree({ wbs, supply, activePhase, setActivePhase, selectedL4, onSe
   const [expanded, setExpanded] = useState({"3":true,"3.1":true,"3.1.3":true});
   const toggle = code => setExpanded(p=>({...p,[code]:!p[code]}));
 
-  // Build tree structure from wbs records
+  // Supply counts per L4 — must be computed BEFORE tree so tree can filter by it
+  const supplyCount = useMemo(()=>{
+    const m={};
+    supply.forEach(s=>{ m[s.l4_group]=(m[s.l4_group]||0)+1; });
+    return m;
+  },[supply]);
+
+  // Build tree structure from wbs records — only include L4 nodes with supply items
   const tree = useMemo(() => {
     const byCode = {};
     wbs.forEach(r => { byCode[r.wbs_code] = r; });
@@ -262,22 +280,24 @@ function WBSNavTree({ wbs, supply, activePhase, setActivePhase, selectedL4, onSe
         if(l2.code===l2key) l2.children.push({code:r.wbs_code,label:r.description,children:[]});
       }));
     });
-    // Add L4
+    // Add L4 — only include nodes that have supply items
     wbs.filter(r=>r.depth===4).forEach(r=>{
       const l3key = r.wbs_code.split(".").slice(0,3).join(".");
+      const hasItems = (supplyCount[r.wbs_code] || 0) > 0;
+      if (!hasItems) return;
       phases.forEach(p=>p.children.forEach(l2=>l2.children.forEach(l3=>{
         if(l3.code===l3key) l3.children.push({code:r.wbs_code,label:r.description,children:null});
       })));
     });
+    // Prune L3 nodes with no L4 children, then L2 nodes with no L3 children
+    phases.forEach(p=>p.children.forEach(l2=>{
+      l2.children = l2.children.filter(l3=>l3.children===null || l3.children.length>0);
+    }));
+    phases.forEach(p=>{
+      p.children = p.children.filter(l2=>l2.children.length>0);
+    });
     return phases;
-  }, [wbs]);
-
-  // Supply counts per L4
-  const supplyCount = useMemo(()=>{
-    const m={};
-    supply.forEach(s=>{ m[s.l4_group]=(m[s.l4_group]||0)+1; });
-    return m;
-  },[supply]);
+  }, [wbs, supplyCount]);
 
   const renderNode = (node, depth=0) => {
     const isLeaf = node.children === null;
@@ -334,6 +354,247 @@ function WBSNavTree({ wbs, supply, activePhase, setActivePhase, selectedL4, onSe
       </div>
       <div className="flex-1 overflow-y-auto py-1">
         {(tree[activePhase-1]?.children||[]).map(node=>renderNode(node,0))}
+      </div>
+    </div>
+  );
+}
+
+// ── COMMISSIONING SCREEN (Phase 4) ──────────────────────────────
+// Read-only derived totals with economy-of-scale scaling
+// Hrs override available per item if estimator needs to adjust
+function CommissioningScreen({ lines, setLines, isCommercial }) {
+  const { supply, commLookup, commProfiles } = useData();
+  const [selectedGroup, setSelectedGroup] = useState(null);
+
+  const EE_RATE = 139.26;
+
+  // Derive commission totals from supply lines
+  // For each commission WBS: sum qty of all supply items pointing to it
+  const commTotals = useMemo(() => {
+    const m = {};
+    supply.forEach(item => {
+      const commWbs = item.commission_wbs;
+      if (!commWbs || !commLookup[commWbs]) return;
+      const qty    = parseFloat(lines[item.wbs_code]?.qty || "0");
+      const factor = parseFloat(lines[item.wbs_code]?.factor || "1");
+      if (!m[commWbs]) m[commWbs] = { qty: 0, ...commLookup[commWbs] };
+      m[commWbs].qty += qty * factor;
+    });
+    return m;
+  }, [supply, lines, commLookup]);
+
+  // Group commission items by L4 (first 4 parts of wbs_code)
+  const groups = useMemo(() => {
+    const g = {};
+    Object.entries(commTotals).forEach(([wbs, data]) => {
+      if (data.qty <= 0) return;
+      const l4 = wbs.split('.').slice(0, 4).join('.');
+      if (!g[l4]) g[l4] = { wbs_codes: [], totalHrs: 0, totalCost: 0 };
+      const scale   = getScaleFactor(commProfiles, data.profile_id, data.qty);
+      const baseHrs = data.qty * (data.hrs_per_unit || 0);
+      const scaledHrs = baseHrs * scale;
+      const rate    = data.ee_labour_rate || EE_RATE;
+      g[l4].wbs_codes.push({ wbs, ...data, scale, baseHrs, scaledHrs, rate });
+      g[l4].totalHrs  += scaledHrs;
+      g[l4].totalCost += scaledHrs * rate;
+    });
+    return g;
+  }, [commTotals, commProfiles]);
+
+  // Get L4 description from commLookup or wbs_master
+  const activeItems = selectedGroup ? (groups[selectedGroup]?.wbs_codes || []) : [];
+  const grandHrs    = Object.values(groups).reduce((a, g) => a + g.totalHrs, 0);
+  const grandCost   = Object.values(groups).reduce((a, g) => a + g.totalCost, 0);
+  const grandComm   = grandCost * (1 + ANS_LAB);
+
+  const getHrsOverride = (wbs) => lines[`comm_ovrd_${wbs}`]?.qty || "";
+  const setHrsOverride = (wbs, val) => setLines(p => ({ ...p, [`comm_ovrd_${wbs}`]: { qty: val } }));
+
+  const STATUS_BADGE = { Confirmed:"bg-green-100 text-green-700", Pending:"bg-yellow-100 text-yellow-700", Draft:"bg-gray-100 text-gray-500" };
+
+  if (Object.keys(groups).length === 0) return (
+    <div className="flex-1 flex items-center justify-center bg-gray-50">
+      <div className="text-center text-gray-400">
+        <div className="text-4xl mb-3">🔧</div>
+        <div className="text-sm font-semibold text-gray-500">No commissioning items triggered yet</div>
+        <div className="text-xs mt-1 text-gray-400">Enter supply quantities in Phase 3 — commissioning hours will appear here automatically</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      {/* LEFT — group nav */}
+      <div className="w-60 bg-gray-900 flex flex-col flex-shrink-0 overflow-hidden">
+        <div className="bg-teal-800 text-white px-3 py-2 flex-shrink-0">
+          <div className="text-xs font-bold uppercase tracking-wide">Phase 4 — Commissioning</div>
+          <div className="text-xs opacity-75 mt-0.5">Auto-derived · {fmtHrs(grandHrs)} total</div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-1">
+          {Object.entries(groups).sort().map(([l4, g]) => (
+            <div key={l4}
+              onClick={() => setSelectedGroup(l4)}
+              className={`px-3 py-2 cursor-pointer text-xs transition-colors border-b border-gray-800 ${
+                selectedGroup === l4 ? "bg-teal-700 text-white" : "text-gray-300 hover:bg-gray-700"}`}>
+              <div className="font-mono text-gray-400 text-xs">{l4}</div>
+              <div className="font-medium truncate mt-0.5">
+                {g.wbs_codes[0]?.description?.split(' - ')[0] || l4}
+              </div>
+              <div className="flex items-center justify-between mt-1">
+                <span className={selectedGroup===l4 ? "text-teal-200" : "text-gray-500"}>
+                  {fmtHrs(g.totalHrs)}
+                </span>
+                <span className={`text-xs px-1 rounded ${selectedGroup===l4 ? "bg-teal-600 text-white" : "bg-gray-700 text-gray-400"}`}>
+                  {g.wbs_codes.length} items
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="border-t border-gray-700 px-3 py-2">
+          <div className="text-xs text-gray-500 mb-1">Investment Totals</div>
+          <div className="text-xs font-bold text-teal-300">{fmtHrs(grandHrs)} commission hrs</div>
+          <div className="text-xs font-bold text-blue-300">{fmt(grandCost)} EE internal</div>
+          {isCommercial && <div className="text-xs font-bold text-orange-300">{fmt(grandComm)} commercial</div>}
+        </div>
+      </div>
+
+      {/* RIGHT — detail panel */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+        {!selectedGroup ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+            Select a commissioning group from the left
+          </div>
+        ) : (
+          <>
+            <div className="bg-white border-b px-4 py-2 flex items-center justify-between flex-shrink-0">
+              <div>
+                <div className="font-bold text-teal-900 text-sm">{selectedGroup} — Commissioning Items</div>
+                <div className="text-xs text-gray-400">
+                  Quantities derived from supply lines · Click hrs to override · Scale factor from economy-of-scale profile
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs font-bold text-teal-700">{fmtHrs(groups[selectedGroup]?.totalHrs || 0)}</div>
+                <div className="text-xs text-gray-500">group total</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {activeItems.map(item => {
+                const ovrd = getHrsOverride(item.wbs);
+                const effectiveHrs = ovrd !== "" ? parseFloat(ovrd)||0 : item.scaledHrs;
+                const cost = effectiveHrs * (item.rate || EE_RATE);
+                const costComm = cost * (1 + ANS_LAB);
+                const profile = commProfiles[item.profile_id];
+                const isOverridden = ovrd !== "";
+
+                return (
+                  <div key={item.wbs} className={`bg-white rounded-lg border shadow-sm overflow-hidden ${isOverridden ? "border-orange-300" : "border-gray-200"}`}>
+                    <div className="px-4 py-2 bg-gray-50 border-b flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-teal-700">{item.wbs}</span>
+                        <span className="font-semibold text-sm text-gray-800">{item.description}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.profile_id && (
+                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_BADGE[item.profile_status] || "bg-gray-100 text-gray-500"}`}>
+                            {item.profile_name} {item.profile_status === "Pending" ? "⚠️" : "✓"}
+                          </span>
+                        )}
+                        {isOverridden && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded font-medium">hrs overridden</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="p-4 grid grid-cols-6 gap-4 items-start">
+                      {/* Derived qty */}
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Derived Qty</div>
+                        <div className="text-xl font-bold text-orange-700">{item.qty.toLocaleString('en-AU', {maximumFractionDigits:1})}</div>
+                        <div className="text-xs text-gray-400">from supply lines</div>
+                      </div>
+
+                      {/* Base hrs */}
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Base Hrs</div>
+                        <div className="text-xl font-bold text-gray-700">{fmtHrs(item.baseHrs)}</div>
+                        <div className="text-xs text-gray-400">{item.hrs_per_unit}h × {item.qty.toFixed(1)}</div>
+                      </div>
+
+                      {/* Scale factor */}
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Scale Factor</div>
+                        <div className={`text-xl font-bold ${item.scale < 1 ? "text-blue-700" : "text-gray-500"}`}>
+                          {fmtPct(item.scale)}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {item.scale < 1 ? `saving ${fmtPct(1-item.scale)}` : "no reduction"}
+                        </div>
+                      </div>
+
+                      {/* Scaled hrs */}
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Scaled Hrs</div>
+                        <div className="text-xl font-bold text-teal-700">{fmtHrs(item.scaledHrs)}</div>
+                        <div className="text-xs text-gray-400">{fmtHrs(item.baseHrs)} × {fmtPct(item.scale)}</div>
+                      </div>
+
+                      {/* Override */}
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Override Hrs</div>
+                        <input type="number" min="0" step="0.5"
+                          value={ovrd}
+                          onChange={e => setHrsOverride(item.wbs, e.target.value)}
+                          placeholder={item.scaledHrs.toFixed(1)}
+                          className={`w-full text-center border rounded px-2 py-1.5 text-sm font-bold focus:outline-none focus:ring-1 ${
+                            isOverridden ? "border-orange-400 bg-orange-50 text-orange-800 focus:ring-orange-400" : "border-gray-300 text-gray-400 focus:ring-teal-400"}`}
+                        />
+                        {isOverridden && (
+                          <button onClick={() => setHrsOverride(item.wbs, "")}
+                            className="text-xs text-orange-600 hover:text-orange-800 mt-1 w-full text-center">
+                            ↺ Reset to scaled
+                          </button>
+                        )}
+                        <div className="text-xs text-gray-400 text-center mt-0.5">effective: {fmtHrs(effectiveHrs)}</div>
+                      </div>
+
+                      {/* Cost */}
+                      <div className="text-center">
+                        <div className="text-xs text-gray-500 mb-1">Cost</div>
+                        <div className="text-sm font-bold text-blue-800">{fmt(cost)}</div>
+                        {isCommercial && <div className="text-xs font-bold text-orange-700">{fmt(costComm)}</div>}
+                        <div className="text-xs text-gray-400">{fmt(item.rate || EE_RATE)}/hr</div>
+                      </div>
+                    </div>
+
+                    {/* Profile tiers */}
+                    {profile && (
+                      <div className="px-4 py-2 bg-gray-50 border-t">
+                        <div className="text-xs text-gray-500 mb-1">
+                          {profile.name} scaling tiers
+                          {item.profile_status === "Pending" && <span className="ml-1 text-amber-600">⚠ pending stakeholder approval</span>}
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {profile.tiers.map((tier, i) => {
+                            const isActive = item.qty >= tier.qty_from && (tier.qty_to === null || item.qty <= tier.qty_to);
+                            return (
+                              <span key={i}
+                                className={`text-xs px-2 py-0.5 rounded font-medium border ${isActive ? "bg-teal-600 text-white border-teal-700" : "bg-white text-gray-500 border-gray-200"}`}>
+                                {tier.qty_from}{tier.qty_to ? `–${tier.qty_to}` : "+"} → {fmtPct(tier.scale)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -728,7 +989,7 @@ function ReviewLines({ lines, isCommercial }) {
 
 // ── SUMMARY SCREEN ───────────────────────────────────────────────
 function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }) {
-  const { supply, commLookup } = useData();
+  const { supply, commLookup, commProfiles } = useData();
   const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
 
   // Phase 1-3, 5 rollups from entered supply items
@@ -745,27 +1006,27 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
     byPhase[ph].lines++;
   });
 
-  // Phase 4 — derived from commission_wbs links on supply items
-  // For each unique commission_wbs, sum qty across all supply items pointing to it
-  const commTotals = {}; // comm_wbs -> {qty, hrs_per_unit, ...}
+  // Phase 4 — derived from commission_wbs links with economy-of-scale scaling
+  const commTotals = {};
   entered.forEach(item=>{
     if(!item.commission_wbs || !commLookup[item.commission_wbs]) return;
     const qty = parseFloat(lines[item.wbs_code]?.qty||"0");
     const factor = parseFloat(lines[item.wbs_code]?.factor||"1");
     const commWbs = item.commission_wbs;
-    if(!commTotals[commWbs]) commTotals[commWbs] = {
-      qty:0, ...commLookup[commWbs]
-    };
+    if(!commTotals[commWbs]) commTotals[commWbs] = { qty:0, ...commLookup[commWbs] };
     commTotals[commWbs].qty += qty * factor;
   });
 
-  const eeRate = 139.26; // default commissioning rate
-  const phase4 = Object.entries(commTotals).reduce((a,[,ct])=>{
-    const hrs = ct.qty * (ct.hrs_per_unit||0);
-    const rate = ct.ee_labour_rate || eeRate;
-    const cost = hrs * rate;
-    const costComm = cost * (1 + ANS_LAB);
-    return {commHrs: a.commHrs+hrs, eeInt: a.eeInt+cost, comm: a.comm+costComm, lines: a.lines+(ct.qty>0?1:0)};
+  const eeRate = 139.26;
+  const phase4 = Object.entries(commTotals).reduce((a,[wbs,ct])=>{
+    if(ct.qty <= 0) return a;
+    const scale   = getScaleFactor(commProfiles, ct.profile_id, ct.qty);
+    const baseHrs = ct.qty * (ct.hrs_per_unit||0);
+    const ovrd    = lines[`comm_ovrd_${wbs}`]?.qty;
+    const hrs     = ovrd !== undefined && ovrd !== "" ? (parseFloat(ovrd)||0) : baseHrs * scale;
+    const rate    = ct.ee_labour_rate || eeRate;
+    const cost    = hrs * rate;
+    return { commHrs:a.commHrs+hrs, eeInt:a.eeInt+cost, comm:a.comm+cost*(1+ANS_LAB), lines:a.lines+1 };
   },{commHrs:0,eeInt:0,comm:0,lines:0});
 
   if(phase4.commHrs > 0) byPhase["4"] = {...phase4, installHrs:0};
@@ -1966,11 +2227,12 @@ const APP_TABS = [
   {id:"saved",      label:"💾 Saved Investments"},
 ];
 const EST_TABS = [
-  {id:"setup",      label:"⚙️ Investment Setup"},
-  {id:"estimate",   label:"📐 Estimation"},
-  {id:"equipment",  label:"🔧 Equipment"},
-  {id:"review",     label:"📋 Review Lines"},
-  {id:"summary",    label:"📊 Summary"},
+  {id:"setup",         label:"⚙️ Investment Setup"},
+  {id:"estimate",      label:"📐 Estimation"},
+  {id:"commissioning", label:"🔧 Commissioning"},
+  {id:"equipment",     label:"📦 Equipment"},
+  {id:"review",        label:"📋 Review Lines"},
+  {id:"summary",       label:"📊 Summary"},
 ];
 
 export default function App() {
@@ -1987,7 +2249,8 @@ export default function App() {
   const [supplyData,  setSupplyData]  = useState([]);
   const [equipData,   setEquipData]   = useState([]);
   const [equipLookup,  setEquipLookup]  = useState({});
-  const [commLookup,   setCommLookup]   = useState({}); // comm_wbs -> {hrs_per_unit, description}
+  const [commLookup,   setCommLookup]   = useState({}); // comm_wbs -> {hrs_per_unit, profile_id,...}
+  const [commProfiles, setCommProfiles] = useState({}); // profile_id -> {tiers, name, status}
   const [equipSel,    setEquipSel]    = useState({});
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
@@ -1999,7 +2262,7 @@ export default function App() {
       fetch(`${BASE}data/supply_items.json`).then(r=>{if(!r.ok)throw new Error("supply_items "+r.status);return r.json();}),
       fetch(`${BASE}data/equipment.json`).then(r=>{if(!r.ok)return {items:[]};return r.json();}).catch(()=>({items:[]})),
       fetch(`${BASE}data/equipment_wbs_lookup.json`).then(r=>{if(!r.ok)return {lookup:{}};return r.json();}).catch(()=>({lookup:{}})),
-      fetch(`${BASE}data/commission_lookup.json`).then(r=>{if(!r.ok)return {lookup:{}};return r.json();}).catch(()=>({lookup:{}})),
+      fetch(`${BASE}data/commission_scaling.json`).then(r=>{if(!r.ok)return {profiles:{},lookup:{}};return r.json();}).catch(()=>({profiles:{},lookup:{}})),
     ])
     .then(([wbs,rates,supply,equip,lookup,commLookup])=>{
       setWbsData(wbs.records||[]);
@@ -2038,6 +2301,7 @@ export default function App() {
       setEquipData(normalised);
       setEquipLookup(lookup.lookup || {});
       setCommLookup(commLookup.lookup || {});
+      setCommProfiles(commLookup.profiles || {});
       setLoading(false);
     })
     .catch(err=>{setError(err.message);setLoading(false);});
@@ -2078,7 +2342,7 @@ export default function App() {
   const linesEntered = Object.values(lines).filter(l=>parseFloat(l.qty)>0).length;
 
   return (
-    <DataCtx.Provider value={{wbs:wbsData,rates:ratesData,supply:supplyData,equipment:equipData,equipLookup,commLookup,loading,error}}>
+    <DataCtx.Provider value={{wbs:wbsData,rates:ratesData,supply:supplyData,equipment:equipData,equipLookup,commLookup,commProfiles,loading,error}}>
       <div className="flex flex-col h-screen font-sans text-sm select-none">
 
         {/* Top nav */}
@@ -2141,13 +2405,14 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-hidden flex flex-col">
-                {estTab==="setup"     && <InvestmentSetup inv={inv} onChange={setInv}/>}
-                {estTab==="estimate"  && (
+                {estTab==="setup"        && <InvestmentSetup inv={inv} onChange={setInv}/>}
+                {estTab==="estimate"     && (
                   <div className="flex flex-1 overflow-hidden">
                     <EstimationScreen isCommercial={isCommercial} lines={lines} setLines={setLines}/>
                   </div>
                 )}
-                {estTab==="equipment" && <EquipmentScreen lines={lines} setLines={setLines} isCommercial={isCommercial} inv={inv}/>}
+                {estTab==="commissioning" && <CommissioningScreen lines={lines} setLines={setLines} isCommercial={isCommercial}/>}
+                {estTab==="equipment"    && <EquipmentScreen lines={lines} setLines={setLines} isCommercial={isCommercial} inv={inv}/>}
                 {estTab==="review"    && <ReviewLines lines={lines} isCommercial={isCommercial}/>}
                 {estTab==="summary"   && <SummaryScreen inv={inv} lines={lines} isCommercial={isCommercial} equipSel={equipSel} onSave={saveInvestment} lastSaved={lastSaved}/>}
               </div>
