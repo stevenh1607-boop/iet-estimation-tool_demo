@@ -32,6 +32,19 @@ function getScaleFactor(profiles, profileId, qty) {
 const ANS_LAB  = 0.20;
 const ANS_MAT  = 0.2686;
 const ANS_CON  = 0.20;
+
+const RESOURCE_TYPES = [
+  "ZS Electrical Technician","ZS Specialist Technician","Metering Technician - Zone Substation",
+  "Electrical Worker - Transmission","Electrical Worker - Underground",
+  "Cable Jointer - Distribution","Cable Jointer - Transmission",
+  "Protection Engineer","Earthing Engineer","Engineer / Technical",
+  "Substation Designer","Distribution Designer","Subtransmission Mains Designer",
+  "SCADA Designer","Telecoms Designer","Telecomms Technician",
+  "Project Manager","External Project Manager / Specialist Engineer",
+  "Network Planner","Network Development Officer","Land & Routes Specialist",
+  "Consultant","Contractor","Contractor - Civil","Contractor - Electrical",
+  "Supplier","Work Away From Home","N.A.",
+];
 const MAT_BURDEN = 0.0752;
 
 function calcLine(item, qty, factor, delivery, installHrsOvrd, contractorRateOvrd, plantCostVal, materialsCostOvrd, isCommercial) {
@@ -367,8 +380,13 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
   const [selectedL4, setSelectedL4]     = useState("3.1.3.04");
   const [selectedCommGroup, setSelectedCommGroup] = useState(null);
   const [expandedRows, setExpandedRows] = useState({});
-  const [deleteWbs,    setDeleteWbs]    = useState(null);
-  const [deleteStage,  setDeleteStage]  = useState(1);
+  // Resource code overrides — keyed by install_wbs/commission_wbs so changes
+  // propagate to ALL supply items sharing that linked WBS code
+  const [resourceOvrd, setResourceOvrdState] = useState({}); // {wbs: {install?, comm?}}
+  const setResourceOvrd = (wbs, role, val) => {
+    if (!wbs) return;
+    setResourceOvrdState(p=>({...p,[wbs]:{...p[wbs],[role]:val}}));
+  };
   const [navSearch, setNavSearch]       = useState("");
 
   // Filter supply items for selected L4 group
@@ -684,7 +702,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <span className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">{item.resource_main}</span>
                       }
                       {item.resource_install && item.install_hrs_per>0 &&
-                        <span className="text-xs text-blue-500 bg-blue-50 border border-blue-200 rounded px-1">Install: {item.resource_install}</span>}
+                        <span className="text-xs text-blue-500 bg-blue-50 border border-blue-200 rounded px-1">Install: {resourceOvrd[item.install_wbs]?.install || item.resource_install}</span>}
                     </div>
                   </div>
                   <div className="text-center text-gray-500">{item.uom||"EA"}</div>
@@ -727,12 +745,6 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           }
                           {" · "}Std: {item.install_hrs_per}h install · {item.comm_hrs_per}h comm · {fmt(item.ee_labour_rate)}/hr
                         </span>
-                        {hasQty && (
-                          <button onClick={()=>setDeleteWbs(item.wbs_code)}
-                            className="text-red-200 hover:text-white hover:bg-red-500 rounded px-1.5 py-0.5 text-xs" title="Delete this line">
-                            🗑 Delete line
-                          </button>
-                        )}
                       </span>
                     </div>
                     <div className="p-3 grid gap-3">
@@ -743,6 +755,28 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                             className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white w-full focus:outline-none focus:ring-1 focus:ring-blue-400">
                             <option>EE Delivered</option><option>Contractor Delivered</option>
                           </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-0.5">Install Resource Code</label>
+                          <select
+                            value={(resourceOvrd[item.install_wbs]?.install) || item.resource_install || "ZS Electrical Technician"}
+                            onChange={e=>setResourceOvrd(item.install_wbs, "install", e.target.value)}
+                            disabled={!item.install_wbs}
+                            className="text-xs border border-indigo-300 bg-indigo-50 rounded px-1.5 py-1 bg-white w-full focus:outline-none focus:ring-1 focus:ring-indigo-400 disabled:bg-gray-100 disabled:text-gray-400">
+                            {RESOURCE_TYPES.map(r=><option key={r}>{r}</option>)}
+                          </select>
+                          {item.install_wbs && <div className="text-xs text-indigo-400 mt-0.5">↳ {item.install_wbs}</div>}
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-0.5">Commission Resource Code</label>
+                          <select
+                            value={(resourceOvrd[item.commission_wbs]?.comm) || item.resource_comm || "ZS Specialist Technician"}
+                            onChange={e=>setResourceOvrd(item.commission_wbs, "comm", e.target.value)}
+                            disabled={!item.commission_wbs}
+                            className="text-xs border border-teal-300 bg-teal-50 rounded px-1.5 py-1 bg-white w-full focus:outline-none focus:ring-1 focus:ring-teal-400 disabled:bg-gray-100 disabled:text-gray-400">
+                            {RESOURCE_TYPES.map(r=><option key={r}>{r}</option>)}
+                          </select>
+                          {item.commission_wbs && <div className="text-xs text-teal-500 mt-0.5">↳ {item.commission_wbs}</div>}
                         </div>
                         <div>
                           <label className="text-xs text-gray-500 block mb-0.5">Install Hrs/Unit Override</label>
@@ -869,47 +903,6 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
       </div>
         </>
       )}
-
-      {/* Delete line — double confirm */}
-      {deleteWbs && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}>
-          <div className="bg-white rounded-xl shadow-2xl p-6 w-96" onClick={e=>e.stopPropagation()}>
-            {deleteStage===1 ? (
-              <>
-                <div className="text-3xl text-center mb-2">⚠️</div>
-                <div className="text-lg font-bold text-gray-900 text-center mb-1">Delete this estimate line?</div>
-                <div className="text-sm text-gray-500 text-center mb-1 font-mono">{deleteWbs}</div>
-                <div className="text-xs text-gray-400 text-center mb-4">
-                  {supply.find(s=>s.wbs_code===deleteWbs)?.description}
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}
-                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded hover:bg-gray-50">Cancel</button>
-                  <button onClick={()=>setDeleteStage(2)}
-                    className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm py-2 rounded font-semibold">Delete</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-3xl text-center mb-2">🛑</div>
-                <div className="text-lg font-bold text-red-700 text-center mb-1">Are you absolutely sure?</div>
-                <div className="text-sm text-gray-500 text-center mb-4">
-                  This will permanently remove the quantity and all overrides for this line. This cannot be undone.
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}
-                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded hover:bg-gray-50">Keep line</button>
-                  <button onClick={()=>{
-                    setLines(p=>{ const n={...p}; delete n[deleteWbs]; return n; });
-                    setDeleteWbs(null); setDeleteStage(1);
-                  }}
-                    className="flex-1 bg-red-700 hover:bg-red-800 text-white text-sm py-2 rounded font-bold">Yes, delete permanently</button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -944,7 +937,7 @@ function ReviewLines({ lines, isCommercial }) {
     <div className="flex-1 overflow-y-auto bg-gray-50 p-4">
       <div className="max-w-6xl mx-auto space-y-4">
         {/* Summary bar */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 grid grid-cols-4 gap-4">
+        <div className={`bg-white rounded-lg border border-gray-200 shadow-sm p-4 grid gap-4 ${isCommercial?"grid-cols-4":"grid-cols-3"}`}>
           <div className="text-center">
             <div className="text-2xl font-bold text-blue-800">{entered.length}</div>
             <div className="text-xs text-gray-500">Lines Entered</div>
@@ -957,10 +950,12 @@ function ReviewLines({ lines, isCommercial }) {
             <div className="text-2xl font-bold text-blue-900">{fmt(totals.eeInt)}</div>
             <div className="text-xs text-gray-500">EE Internal Total</div>
           </div>
+          {isCommercial && (
           <div className="text-center">
             <div className="text-2xl font-bold text-orange-700">{fmt(totals.comm)}</div>
             <div className="text-xs text-gray-500">Commercial Total</div>
           </div>
+          )}
         </div>
 
         {Object.entries(byPhase).map(([phase,items])=>(
@@ -978,7 +973,7 @@ function ReviewLines({ lines, isCommercial }) {
                   <th className="text-right px-3 py-2 font-semibold text-purple-600">Install Hrs</th>
                   <th className="text-right px-3 py-2 font-semibold text-teal-600">Comm Hrs</th>
                   <th className="text-right px-3 py-2 font-semibold text-blue-700">EE Internal</th>
-                  <th className="text-right px-3 py-2 font-semibold text-orange-700">Commercial</th>
+                  {isCommercial && <th className="text-right px-3 py-2 font-semibold text-orange-700">Commercial</th>}
                   <th className="text-left px-3 py-2 font-semibold text-gray-500">Delivery</th>
                 </tr>
               </thead>
@@ -995,7 +990,7 @@ function ReviewLines({ lines, isCommercial }) {
                       <td className="px-3 py-2 text-right font-medium text-purple-700">{fmtHrs(c.installHrs)}</td>
                       <td className="px-3 py-2 text-right font-medium text-teal-700">{fmtHrs(c.commHrs)}</td>
                       <td className="px-3 py-2 text-right font-bold text-blue-800">{fmt(c.eeInt)}</td>
-                      <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(c.comm)}</td>
+                      {isCommercial && <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(c.comm)}</td>}
                       <td className="px-3 py-2 text-gray-500">{c.isContr?"Contractor":"EE"}</td>
                     </tr>
                   );
@@ -1741,7 +1736,7 @@ const SAMPLE_PEOPLE=[
 const ROW_HEIGHT = 30; // px per row
 const OVERSCAN   = 20; // extra rows above/below viewport
 
-function WBSVirtualList({ rows, managerMode=false, editingWbs=null, editVals={}, setEditVals, onStartEdit, onSaveEdit, onCancelEdit, wbsOverrides={} }) {
+function WBSVirtualList({ rows, managerMode=false, editingWbs=null, editVals={}, setEditVals, onStartEdit, onSaveEdit, onCancelEdit, wbsOverrides={}, onDeleteWbs }) {
   const containerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [containerHeight, setContainerHeight] = useState(600);
@@ -1827,7 +1822,10 @@ function WBSVirtualList({ rows, managerMode=false, editingWbs=null, editVals={},
                           <button onClick={()=>onSaveEdit(row.wbs_code)} className="text-green-600 hover:text-green-800 font-bold text-xs">✓</button>
                           <button onClick={onCancelEdit} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
                         </div>
-                      : <button onClick={()=>onStartEdit(row)} className="text-blue-400 hover:text-blue-700 text-xs">Edit</button>
+                      : <div className="flex gap-1.5 justify-center">
+                          <button onClick={()=>onStartEdit(row)} className="text-blue-400 hover:text-blue-700 text-xs">Edit</button>
+                          {isAdded && <button onClick={()=>onDeleteWbs&&onDeleteWbs(row.wbs_code)} className="text-red-400 hover:text-red-700 text-xs">Del</button>}
+                        </div>
                     : <span className="text-gray-400">{row.depth}</span>
                   }
                 </td>
@@ -2141,6 +2139,14 @@ function WBSManager({ equipSel, setEquipSel }) {
     setNewWbs({wbs_code:"",description:"",scope:"Supply",depth:6});
   };
 
+  // Delete WBS item — double confirm, only for items added in this session
+  const [deleteWbs,   setDeleteWbs]   = useState(null);
+  const [deleteStage, setDeleteStage] = useState(1);
+  const confirmDeleteWbs = () => {
+    setWbsOverrides(p=>{ const n={...p}; delete n[deleteWbs]; return n; });
+    setDeleteWbs(null); setDeleteStage(1);
+  };
+
   const addPerson=()=>{
     if(!newP.name.trim()||!newP.email.trim()) return;
     setPeople(p=>[...p,{id:Date.now(),...newP,active:true}]);
@@ -2185,6 +2191,44 @@ function WBSManager({ equipSel, setEquipSel }) {
               <button onClick={tryUnlock}
                 className="flex-1 text-xs bg-blue-700 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold">Unlock</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete WBS — double confirm */}
+      {deleteWbs && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-96" onClick={e=>e.stopPropagation()}>
+            {deleteStage===1 ? (
+              <>
+                <div className="text-3xl text-center mb-2">⚠️</div>
+                <div className="text-lg font-bold text-gray-900 text-center mb-1">Delete this WBS item?</div>
+                <div className="text-sm text-gray-500 text-center mb-1 font-mono">{deleteWbs}</div>
+                <div className="text-xs text-gray-400 text-center mb-4">
+                  {wbsOverrides[deleteWbs]?.description}
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}
+                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded hover:bg-gray-50">Cancel</button>
+                  <button onClick={()=>setDeleteStage(2)}
+                    className="flex-1 bg-red-500 hover:bg-red-600 text-white text-sm py-2 rounded font-semibold">Delete</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-3xl text-center mb-2">🛑</div>
+                <div className="text-lg font-bold text-red-700 text-center mb-1">Are you absolutely sure?</div>
+                <div className="text-sm text-gray-500 text-center mb-4">
+                  This will permanently remove WBS item <span className="font-mono">{deleteWbs}</span> from the catalogue. This cannot be undone.
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={()=>{setDeleteWbs(null);setDeleteStage(1);}}
+                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded hover:bg-gray-50">Keep item</button>
+                  <button onClick={confirmDeleteWbs}
+                    className="flex-1 bg-red-700 hover:bg-red-800 text-white text-sm py-2 rounded font-bold">Yes, delete permanently</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -2291,6 +2335,7 @@ function WBSManager({ equipSel, setEquipSel }) {
                 onSaveEdit={saveEditWbs}
                 onCancelEdit={()=>setEditingWbs(null)}
                 wbsOverrides={wbsOverrides}
+                onDeleteWbs={(code)=>{setDeleteWbs(code);setDeleteStage(1);}}
               />
             )}
           </div>
