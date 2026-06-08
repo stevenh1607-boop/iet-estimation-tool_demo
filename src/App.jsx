@@ -9,7 +9,68 @@ import { useState, useMemo, useEffect, useCallback, createContext, useContext, u
 const BASE = import.meta.env.BASE_URL || "/";
 
 // ── DATA CONTEXT ────────────────────────────────────────────────
-const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equipLookup:{}, commLookup:{}, commProfiles:{}, loading:true, error:null });
+const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equipLookup:{}, commLookup:{}, commProfiles:{}, escRates:null, loading:true, error:null });
+
+// ── ESCALATION ENGINE ────────────────────────────────────────────
+// Australian FY: July–June. Month 1 = project start = July of start year.
+// Compound monthly escalation index per the ABS-based formula.
+function escalationIndex(monthNum, annualRatesArr) {
+  // annualRatesArr: [r_y1, r_y2, r_y3, r_y4] as decimals (e.g. 0.045)
+  let cumulative = 1.0;
+  let remaining  = monthNum;
+  for (const rate of annualRatesArr) {
+    const m = Math.min(remaining, 12);
+    cumulative *= Math.pow(1 + rate, m / 12);
+    remaining  -= m;
+    if (remaining <= 0) break;
+  }
+  return cumulative - 1;
+}
+
+function calcEscalation(costBreakdown, escRates, inv) {
+  // costBreakdown: { byPhase: { "1":{eeLabCost,contrCost,matCost}, ... } }
+  // escRates: the escalation_rates.json object
+  // inv: investment setup with phase timeline
+  // Returns { escEE, escContr, escMat, escTotal, factors }
+  if (!escRates) return { escEE:0, escContr:0, escMat:0, escTotal:0 };
+
+  const startMonth = parseInt(inv.startMonth_num || 1); // fiscal month offset (always 1 for Jul start)
+  const phases = [
+    { key:"1", start: 1,                                  dur: parseInt(inv.planDur||4)  },
+    { key:"2", start: parseInt(inv.designStart||1),       dur: parseInt(inv.designDur||9) },
+    { key:"3", start: parseInt(inv.constrStart||6),       dur: parseInt(inv.constrDur||15) },
+    { key:"4", start: parseInt(inv.constrStart||6),       dur: parseInt(inv.constrDur||15) }, // commission aligned to construction
+    { key:"5", start: parseInt(inv.constrStart||6) + parseInt(inv.constrDur||15) - 1, dur: 2 },
+  ];
+
+  const rEE   = Object.values(escRates.internal_ee.rates).map(r=>r/100);
+  const rContr = Object.values(escRates.contractors.rates).map(r=>r/100);
+  const rMat  = Object.values(escRates.materials.rates).map(r=>r/100);
+
+  let escEE=0, escContr=0, escMat=0;
+
+  for (const ph of phases) {
+    const costs = costBreakdown[ph.key];
+    if (!costs || ph.dur <= 0) continue;
+    // Average escalation index across the phase months
+    let avgEE=0, avgContr=0, avgMat=0;
+    for (let m = ph.start; m < ph.start + ph.dur; m++) {
+      avgEE    += escalationIndex(m, rEE);
+      avgContr += escalationIndex(m, rContr);
+      avgMat   += escalationIndex(m, rMat);
+    }
+    avgEE    /= ph.dur;
+    avgContr /= ph.dur;
+    avgMat   /= ph.dur;
+
+    escEE    += (costs.eeLabCost    || 0) * avgEE;
+    escContr += (costs.contrCost    || 0) * avgContr;
+    escMat   += (costs.matCost      || 0) * avgMat;
+  }
+
+  const escTotal = escEE + escContr + escMat;
+  return { escEE, escContr, escMat, escTotal };
+}
 function useData() { return useContext(DataCtx); }
 
 // ── HELPERS ─────────────────────────────────────────────────────
@@ -1006,7 +1067,7 @@ function ReviewLines({ lines, isCommercial }) {
 
 // ── SUMMARY SCREEN ───────────────────────────────────────────────
 function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }) {
-  const { supply, wbs: wbsMaster, commLookup, commProfiles } = useData();
+  const { supply, wbs: wbsMaster, commLookup, commProfiles, escRates } = useData();
   const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
   const [openNodes, setOpenNodes] = useState({}); // {wbs_code: bool}
 
@@ -1018,12 +1079,15 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
   entered.forEach(item=>{
     const ph=item.wbs_code.split(".")[0];
     if(ph==="4") return;
-    if(!byPhase[ph]) byPhase[ph]={eeInt:0,comm:0,installHrs:0,commHrs:0,lines:0};
+    if(!byPhase[ph]) byPhase[ph]={eeInt:0,comm:0,installHrs:0,commHrs:0,lines:0,eeLabCost:0,contrCost:0,matCost:0};
     const ln=lines[item.wbs_code]||{};
     const c=calcLine(item,ln.qty||"",ln.factor||"1",ln.delivery,ln.instHrsOvrd,ln.contrRate,ln.plant,ln.mats,isCommercial);
     byPhase[ph].eeInt+=c.eeInt; byPhase[ph].comm+=c.comm;
     byPhase[ph].installHrs+=c.installHrs; byPhase[ph].commHrs+=c.commHrs;
     byPhase[ph].lines++;
+    byPhase[ph].eeLabCost  += c.eeLabCost  || 0;
+    byPhase[ph].contrCost  += c.contrCost  || 0;
+    byPhase[ph].matCost    += c.equipCost  || 0; // PCE/materials
   });
 
   // Phase 4 derived
@@ -1047,13 +1111,62 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
     const cost=hrs*rate;
     return {commHrs:a.commHrs+hrs,eeInt:a.eeInt+cost,comm:a.comm+cost*(1+ANS_LAB),lines:a.lines+1};
   },{commHrs:0,eeInt:0,comm:0,lines:0});
-  if(phase4.commHrs>0) byPhase["4"]={...phase4,installHrs:0};
+  if(phase4.commHrs>0) byPhase["4"]={...phase4,installHrs:0,eeLabCost:phase4.eeInt,contrCost:0,matCost:0};
 
   const grandEE   = Object.values(byPhase).reduce((a,p)=>a+p.eeInt,0);
   const grandComm = Object.values(byPhase).reduce((a,p)=>a+p.comm,0);
   const contPct   = parseFloat(isCommercial?inv.contComm:inv.contInt)||10;
   const contAmt   = (isCommercial?grandComm:grandEE)*contPct/100;
   const totalWithCont = (isCommercial?grandComm:grandEE)+contAmt;
+
+  // ── ESCALATION ──────────────────────────────────────────────────
+  // Calculate weighted escalation per phase using project timeline
+  const escResult = useMemo(()=>{
+    if (!escRates) return { escEE:0, escContr:0, escMat:0, escTotal:0, escComm:0, byCategory:{} };
+    const rEE    = Object.values(escRates.internal_ee.rates).map(r=>r/100);
+    const rContr = Object.values(escRates.contractors.rates).map(r=>r/100);
+    const rMat   = Object.values(escRates.materials.rates).map(r=>r/100);
+
+    const phaseDefs = {
+      "1": { start:1,                                    dur:parseInt(inv.planDur||4)   },
+      "2": { start:parseInt(inv.designStart||1),         dur:parseInt(inv.designDur||9) },
+      "3": { start:parseInt(inv.constrStart||6),         dur:parseInt(inv.constrDur||15)},
+      "4": { start:parseInt(inv.constrStart||6),         dur:parseInt(inv.constrDur||15)},
+      "5": { start:parseInt(inv.constrStart||6)+parseInt(inv.constrDur||15)-1, dur:2   },
+    };
+
+    let escEE=0, escContr=0, escMat=0;
+    Object.entries(byPhase).forEach(([ph, costs])=>{
+      const pd = phaseDefs[ph];
+      if (!pd || pd.dur <= 0) return;
+      let avgEE=0, avgContr=0, avgMat=0;
+      for (let m=pd.start; m<pd.start+pd.dur; m++) {
+        avgEE    += escalationIndex(m, rEE);
+        avgContr += escalationIndex(m, rContr);
+        avgMat   += escalationIndex(m, rMat);
+      }
+      avgEE    /= pd.dur;
+      avgContr /= pd.dur;
+      avgMat   /= pd.dur;
+      escEE    += (costs.eeLabCost||0) * avgEE;
+      escContr += (costs.contrCost||0) * avgContr;
+      escMat   += (costs.matCost||0)   * avgMat;
+    });
+
+    const escTotal = escEE + escContr + escMat;
+    const escComm  = escTotal * (1 + ANS_LAB); // ANS uplift on escalation for commercial
+    return {
+      escEE, escContr, escMat, escTotal,
+      escComm: isCommercial ? escComm : escTotal,
+      byCategory: {
+        "EE Labour":   { val: escEE,    pct: grandEE>0   ? escEE/grandEE*100   : 0 },
+        "Contractors": { val: escContr, pct: grandEE>0   ? escContr/grandEE*100 : 0 },
+        "Materials":   { val: escMat,   pct: grandEE>0   ? escMat/grandEE*100   : 0 },
+      }
+    };
+  },[escRates, byPhase, inv, isCommercial]);
+
+  const finalTotal = (isCommercial ? grandComm : grandEE) + contAmt + (isCommercial ? escResult.escComm : escResult.escTotal);
 
   // Build WBS tree down to L5 for each entered supply item + Phase 4 commission
   const nodeRollup = useMemo(()=>{
@@ -1218,18 +1331,66 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
           </div>
         )}
 
-        {/* Contingency + Grand total */}
+        {/* Contingency + Escalation + Grand Total */}
         {grandEE>0 && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 90px 90px":"1fr 90px"}}>
-              <div className="px-4 py-2 text-gray-500">Contingency ({contPct}%)</div>
-              <div className="py-2 text-right pr-4 text-blue-600 font-medium">{fmt(grandEE*contPct/100)}</div>
+            {/* Contingency row */}
+            <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+              <div className="px-4 py-2 text-gray-600 font-medium">Base Estimate (excl. contingency &amp; escalation)</div>
+              <div className="py-2 text-right pr-4 font-bold text-blue-900">{fmt(grandEE)}</div>
+              {isCommercial && <div className="py-2 text-right pr-4 font-bold text-orange-800">{fmt(grandComm)}</div>}
+            </div>
+            <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+              <div className="px-4 py-2 text-gray-600">
+                Contingency ({contPct}%)
+              </div>
+              <div className="py-2 text-right pr-4 text-blue-600 font-medium">{fmt(contAmt * (grandEE/(grandComm||grandEE)))}</div>
               {isCommercial && <div className="py-2 text-right pr-4 text-orange-600 font-medium">{fmt(contAmt)}</div>}
             </div>
-            <div className="grid text-sm font-bold bg-orange-50" style={{gridTemplateColumns: isCommercial?"1fr 90px 90px":"1fr 90px"}}>
-              <div className="px-4 py-3 text-orange-900">TOTAL (incl. contingency)</div>
-              <div className="py-3 text-right pr-4 text-blue-900">{fmt(grandEE+grandEE*contPct/100)}</div>
-              {isCommercial && <div className="py-3 text-right pr-4 text-orange-900 text-base">{fmt(totalWithCont)}</div>}
+
+            {/* Escalation breakdown */}
+            {escResult.escTotal > 0 && (
+              <div className="border-b">
+                <div className="grid text-xs bg-teal-50" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+                  <div className="px-4 py-2 font-semibold text-teal-800 flex items-center gap-2">
+                    📈 Escalation
+                    <span className="text-xs text-teal-600 font-normal">
+                      (weighted avg across project timeline)
+                    </span>
+                  </div>
+                  <div className="py-2 text-right pr-4 font-bold text-teal-700">{fmt(escResult.escTotal)}</div>
+                  {isCommercial && <div className="py-2 text-right pr-4 font-bold text-teal-700">{fmt(escResult.escComm)}</div>}
+                </div>
+                {/* Category breakdown */}
+                {Object.entries(escResult.byCategory).filter(([,v])=>v.val>0).map(([label,v])=>(
+                  <div key={label} className="grid text-xs border-t border-teal-100 bg-teal-50/50"
+                    style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+                    <div className="px-6 py-1 text-teal-700">
+                      ↳ {label} <span className="text-teal-400">({v.pct.toFixed(2)}% of base)</span>
+                    </div>
+                    <div className="py-1 text-right pr-4 text-teal-600 font-medium">{fmt(v.val)}</div>
+                    {isCommercial && <div className="py-1 text-right pr-4 text-teal-500">{fmt(v.val*(1+ANS_LAB))}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!escRates && (
+              <div className="px-4 py-2 text-xs text-amber-600 bg-amber-50 border-b">
+                ⚠ Escalation rates not loaded — upload <span className="font-mono">escalation_rates.json</span> to public/data/
+              </div>
+            )}
+
+            {/* FINAL TOTAL */}
+            <div className="grid font-bold text-sm bg-blue-900 text-white"
+              style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+              <div className="px-4 py-3.5">
+                TOTAL — Base + Contingency + Escalation
+                <div className="text-xs font-normal opacity-75 mt-0.5">
+                  {inv.name||"Investment"} · {inv.estClass} · Rev {inv.revision}
+                </div>
+              </div>
+              <div className="py-3.5 text-right pr-4 text-white text-base">{fmt(finalTotal * (grandEE/(grandComm||grandEE)))}</div>
+              {isCommercial && <div className="py-3.5 text-right pr-4 text-orange-300 text-base font-bold">{fmt(finalTotal)}</div>}
             </div>
           </div>
         )}
@@ -2075,6 +2236,165 @@ function ScalingEditor({ managerMode, onUnlock }) {
 }
 
 
+// ── ESCALATION EDITOR ────────────────────────────────────────────
+function EscalationEditor({ managerMode, onUnlock }) {
+  const { escRates: ctxRates } = useData();
+  const [localRates, setLocalRates] = useState(null);
+  const rates = localRates || ctxRates;
+
+  const FYS = ["FY2026","FY2027","FY2028","FY2029"];
+  const CATS = ["internal_ee","contractors","materials"];
+
+  const updateRate = (cat, fy, val) => {
+    const base = localRates || ctxRates;
+    if (!base) return;
+    setLocalRates({
+      ...base,
+      [cat]: { ...base[cat], rates: { ...base[cat].rates, [fy]: parseFloat(val)||0 } }
+    });
+  };
+
+  // Show worked example of what the rates produce
+  const exampleFactors = (cat) => {
+    if (!rates) return {};
+    const r = Object.values(rates[cat].rates).map(v=>v/100);
+    const phaseFactors = {};
+    [[1,4,"Planning"],[1,9,"Design"],[6,15,"Construction/Comm"]].forEach(([start,dur,label])=>{
+      let avg = 0;
+      for (let m=start; m<start+dur; m++) avg += escalationIndex(m, r);
+      phaseFactors[label] = (avg/dur*100).toFixed(2);
+    });
+    return phaseFactors;
+  };
+
+  if (!rates) return (
+    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
+      Loading escalation rates…
+    </div>
+  );
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
+        <div>
+          <span className="text-xs font-semibold text-gray-700">Annual Escalation Rates</span>
+          <span className="text-xs text-gray-400 ml-2">Source: ABS Producer Price Index — Construction</span>
+        </div>
+        <div className="flex-1"/>
+        {managerMode ? (
+          <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded font-semibold">🔓 Manager Mode — click rates to edit</span>
+        ) : (
+          <button onClick={onUnlock} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded flex items-center gap-1.5">🔒 Manager Mode</button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* Rate table */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-blue-900 text-white px-4 py-2.5">
+              <div className="font-bold text-sm">Annual Escalation Rates by Category</div>
+              <div className="text-xs opacity-75 mt-0.5">Applied by fiscal year (Australian FY: July – June)</div>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold text-gray-600">Category</th>
+                  {FYS.map(fy=>(
+                    <th key={fy} className="text-center px-4 py-2 font-semibold text-gray-600">{fy}</th>
+                  ))}
+                  <th className="text-left px-4 py-2 font-semibold text-gray-400 text-xs">Reference</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CATS.map(cat=>{
+                  const r = rates[cat];
+                  return (
+                    <tr key={cat} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-gray-800">{r.label}</td>
+                      {FYS.map(fy=>(
+                        <td key={fy} className="px-4 py-3 text-center">
+                          {managerMode ? (
+                            <div className="flex items-center justify-center gap-1">
+                              <input
+                                type="number" min="0" max="20" step="0.1"
+                                value={r.rates[fy]}
+                                onChange={e=>updateRate(cat, fy, e.target.value)}
+                                className="w-16 text-center border border-blue-300 bg-blue-50 rounded px-1.5 py-1 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-400"
+                              />
+                              <span className="text-gray-500 text-xs">%</span>
+                            </div>
+                          ) : (
+                            <span className={`text-sm font-bold ${r.rates[fy]>=5?"text-red-600":r.rates[fy]>=4?"text-orange-600":"text-green-600"}`}>
+                              {r.rates[fy]}%
+                            </span>
+                          )}
+                        </td>
+                      ))}
+                      <td className="px-4 py-3 text-xs text-gray-400">{r.reference}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Worked example — phase escalation factors at current rates */}
+          <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-teal-800 text-white px-4 py-2.5">
+              <div className="font-bold text-sm">Weighted Escalation Factors by Phase</div>
+              <div className="text-xs opacity-75 mt-0.5">Average escalation index applied to each phase cost based on project timeline</div>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-2 font-semibold text-gray-600">Category</th>
+                  <th className="text-center px-4 py-2 font-semibold text-gray-600">Planning (Months 1–4)</th>
+                  <th className="text-center px-4 py-2 font-semibold text-gray-600">Design (Months 1–9)</th>
+                  <th className="text-center px-4 py-2 font-semibold text-gray-600">Construction (Months 6–20)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {CATS.map(cat=>{
+                  const factors = exampleFactors(cat);
+                  return (
+                    <tr key={cat} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-3 font-semibold text-gray-700">{rates[cat].label}</td>
+                      {["Planning","Design","Construction/Comm"].map(ph=>(
+                        <td key={ph} className="px-4 py-3 text-center">
+                          <span className="font-bold text-blue-800">{factors[ph]}%</span>
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="px-4 py-2 bg-gray-50 text-xs text-gray-500">
+              ℹ Based on default timeline (Plan: months 1–4, Design: months 1–9, Construction: months 6–20).
+              Actual factors calculated per investment timeline on the Summary tab.
+            </div>
+          </div>
+
+          {/* Formula explanation */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-800">
+            <div className="font-bold mb-2">How escalation is calculated</div>
+            <div className="space-y-1">
+              <div>1. Each phase cost is split into Labour (EE), Contractors, and Materials.</div>
+              <div>2. For each project month, an escalation index is computed: <span className="font-mono">(1+r_y1)^(m1/12) × (1+r_y2)^(m2/12) − 1</span></div>
+              <div>3. The average index across the phase duration gives the phase escalation factor.</div>
+              <div>4. Escalation cost = Base cost × Phase factor, summed across all phases.</div>
+              <div>5. Rates are based on the Australian FY (Jul–Jun). FY2026 = Jul 2025 – Jun 2026.</div>
+              <div className="mt-2 font-semibold">Reference: ABS Producer Price Index (PPI) — Heavy and Civil Engineering Construction</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WBSManager({ equipSel, setEquipSel }) {
   const {wbs:wbsCtx, rates, loading, error} = useData();
   const [tab,          setTab]         = useState("items");
@@ -2156,11 +2476,12 @@ function WBSManager({ equipSel, setEquipSel }) {
 
   const equipSelectedCount = Object.values(equipSel).filter(q=>parseFloat(q)>0).length;
   const tabs=[
-    {id:"items",   label:"📋 WBS Items",          count:wbs.length},
-    {id:"rates",   label:"💲 Resource Rates",      count:rates.length},
-    {id:"catalogue",label:"🔧 Equipment Catalogue",count:null},
-    {id:"scaling", label:"📐 Comm Scaling",         count:WBS_PROFILES.length},
-    {id:"people",  label:"👥 People & Roles",       count:people.filter(p=>p.active).length},
+    {id:"items",     label:"📋 WBS Items",          count:wbs.length},
+    {id:"rates",     label:"💲 Resource Rates",      count:rates.length},
+    {id:"catalogue", label:"🔧 Equipment Catalogue", count:null},
+    {id:"escalation",label:"📈 Escalation Rates",    count:null},
+    {id:"scaling",   label:"📐 Comm Scaling",         count:WBS_PROFILES.length},
+    {id:"people",    label:"👥 People & Roles",       count:people.filter(p=>p.active).length},
   ];
 
   return (
@@ -2350,6 +2671,11 @@ function WBSManager({ equipSel, setEquipSel }) {
       {/* Equipment Catalogue */}
       {tab==="catalogue"&&(
         <EquipmentCatalogueManager equipSel={equipSel} setEquipSel={setEquipSel}/>
+      )}
+
+      {/* Escalation Rates */}
+      {tab==="escalation"&&(
+        <EscalationEditor managerMode={managerMode} onUnlock={()=>setShowPinModal(true)}/>
       )}
 
       {/* Commissioning Scaling */}
@@ -2973,6 +3299,7 @@ export default function App() {
   const [equipLookup,  setEquipLookup]  = useState({});
   const [commLookup,   setCommLookup]   = useState({}); // comm_wbs -> {hrs_per_unit, profile_id,...}
   const [commProfiles, setCommProfiles] = useState({}); // profile_id -> {tiers, name, status}
+  const [escRates,     setEscRates]     = useState(null); // escalation rates by category
   const [equipSel,    setEquipSel]    = useState({});
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState(null);
@@ -2985,8 +3312,9 @@ export default function App() {
       fetch(`${BASE}data/equipment.json`).then(r=>{if(!r.ok)return {items:[]};return r.json();}).catch(()=>({items:[]})),
       fetch(`${BASE}data/equipment_wbs_lookup.json`).then(r=>{if(!r.ok)return {lookup:{}};return r.json();}).catch(()=>({lookup:{}})),
       fetch(`${BASE}data/commission_scaling.json`).then(r=>{if(!r.ok)return {profiles:{},lookup:{}};return r.json();}).catch(()=>({profiles:{},lookup:{}})),
+      fetch(`${BASE}data/escalation_rates.json`).then(r=>{if(!r.ok)return null;return r.json();}).catch(()=>null),
     ])
-    .then(([wbs,rates,supply,equip,lookup,commLookup])=>{
+    .then(([wbs,rates,supply,equip,lookup,commLookup,escRatesData])=>{
       setWbsData(wbs.records||[]);
       setRatesData(rates.records||[]);
       setSupplyData(supply.items||[]);
@@ -3024,6 +3352,7 @@ export default function App() {
       setEquipLookup(lookup.lookup || {});
       setCommLookup(commLookup.lookup || {});
       setCommProfiles(commLookup.profiles || {});
+      setEscRates(escRatesData);
       setLoading(false);
     })
     .catch(err=>{setError(err.message);setLoading(false);});
@@ -3099,7 +3428,7 @@ export default function App() {
   const linesEntered = Object.values(lines).filter(l=>parseFloat(l.qty)>0).length;
 
   return (
-    <DataCtx.Provider value={{wbs:wbsData,rates:ratesData,supply:supplyData,equipment:equipData,equipLookup,commLookup,commProfiles,loading,error}}>
+    <DataCtx.Provider value={{wbs:wbsData,rates:ratesData,supply:supplyData,equipment:equipData,equipLookup,commLookup,commProfiles,escRates,loading,error}}>
       <div className="flex flex-col h-screen font-sans text-sm select-none">
 
         {/* Top nav */}
