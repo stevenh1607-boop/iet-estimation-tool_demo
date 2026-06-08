@@ -327,6 +327,21 @@
       "uom": "Hour",
       "ans_margin_pct_labour": 0.550984,
       "resource_category": "Labour"
+    },
+    {
+      "resource_type": "Work Away From Home",
+      "aer_code": "WAFHA",
+      "erp_code": "WAFHA",
+      "ee_internal_rate": 359.5,
+      "ee_commercial_rate": 345.8256,
+      "ans_margin_pct_labour": 0.0,
+      "uom": "Day",
+      "account_code_internal": "001001",
+      "account_code_external": "001000",
+      "resource_code": "WAFHA",
+      "currency_type": "Dollar",
+      "labour_type": ""
     }
-  ]
+  ],
+  "total": 26
 }
