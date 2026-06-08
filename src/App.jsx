@@ -1688,6 +1688,237 @@ const CLASS_COLOR = {
   "Class 5":"bg-green-100 text-green-700",
 };
 
+// ── FINANCIAL REPORT SCREEN ──────────────────────────────────────
+// Mirrors the Financial Report sheet: cost summary table, Commercial
+// Project Agreement breakdown, and cash flow chart.
+function FinancialScreen({ inv, lines, isCommercial }) {
+  const { supply } = useData();
+
+  const totals = useMemo(() => {
+    let subCost=0, matCost=0, eeCost=0;
+    let subANS=0,  matANS=0,  eeANS=0;
+    supply.forEach(item => {
+      const ln = lines[item.wbs_code] || {};
+      if (!parseFloat(ln.qty||"0")) return;
+      const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery,
+                         ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial);
+      const isContr = (ln.delivery||item.delivery_method||"") === "Contractor Delivered";
+      if (isContr) { subCost += c.contrCost||0; subANS += (c.contrCost||0)*ANS_CONTR; }
+      else          { eeCost  += c.eeCost||0;    eeANS  += (c.eeCost||0)*ANS_LAB; }
+      matCost += c.matCost||0;
+      matANS  += (c.matCost||0)*ANS_MAT;
+    });
+    const contPct  = parseFloat(inv.contingency||"0")/100;
+    const base     = subCost + matCost + eeCost;
+    const cont     = base * contPct;
+    const totalCost = base + cont;
+    const totalANS  = subANS + matANS + eeANS;
+    const cv        = totalCost + totalANS;
+    const gst       = cv * 0.1;
+    return { subCost, matCost, eeCost, subANS, matANS, eeANS, cont,
+             totalCost, totalANS, cv, gst, gstInc: cv+gst,
+             eeOH: cv * 1.866 };
+  }, [supply, lines, isCommercial, inv]);
+
+  // Cash flow — cumulative S-curve over project months
+  const cashFlow = useMemo(() => {
+    const conStart = parseInt(inv.constrStart||6);
+    const conDur   = parseInt(inv.constrDur||15);
+    const total    = Math.max(parseInt(inv.planDur||4)+1,
+                              parseInt(inv.designStart||1)+parseInt(inv.designDur||9),
+                              conStart+conDur);
+    const MON = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
+    const sm  = MON[inv.startMonth||"Jul"]||7;
+    const sy  = parseInt(inv.startYear||2025);
+    const lbl = i => { const o=sm-1+i; const mn=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return `${mn[(o%12)]}${String(sy+Math.floor(o/12)).slice(2)}`; };
+
+    // S-curve weights
+    const weights = Array.from({length:total},(_,i)=>{
+      const m=i+1;
+      if(m>=conStart && m<conStart+conDur){
+        const mid=conStart+conDur/2;
+        return Math.exp(-Math.pow((m-mid)/(conDur/3),2));
+      }
+      return m<conStart ? 0.3/(conStart-1||1) : 0;
+    });
+    const ws=weights.reduce((a,b)=>a+b,0)||1;
+    const norm=weights.map(w=>w/ws);
+
+    // Milestone: 15% month 1, 35% at 40% construction, 50% at end construction
+    const milestones = Array(total).fill(0);
+    milestones[0]=0.15;
+    milestones[Math.min(conStart+Math.floor(conDur*0.4),total-1)]=0.35;
+    milestones[Math.min(conStart+conDur-2,total-1)]=0.50;
+
+    let cumC=0,cumE=0,cumM=0;
+    return Array.from({length:total},(_,i)=>{
+      cumC+=norm[i]*(totals.totalCost/1e6);
+      cumE+=norm[i]*(totals.eeOH/1e6);
+      cumM+=milestones[i]*(totals.cv/1e6);
+      return { lbl:lbl(i), cumC, cumE, cumM };
+    });
+  }, [inv, totals]);
+
+  const maxY = Math.max(...cashFlow.map(r=>Math.max(r.cumC,r.cumE,r.cumM)))*1.12||1;
+  const CW=700,CH=230,PL=52,PR=20,PT=18,PB=55;
+  const W=CW-PL-PR, H=CH-PT-PB;
+  const sx=cashFlow.length>1?W/(cashFlow.length-1):W;
+  const sy=v=>H-(v/maxY)*H;
+  const pts=key=>cashFlow.map((r,i)=>`${PL+i*sx},${PT+sy(r[key])}`).join(" ");
+  const fmtD=n=>n===0?"–":"$"+Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const step=Math.max(1,Math.floor(cashFlow.length/14));
+
+  return (
+    <div className="flex flex-col gap-4 p-4 overflow-y-auto h-full bg-gray-50">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-[#1e3a5f]">Financial Report — {inv.name||"Current Estimate"}</h2>
+        <span className="text-xs text-gray-400 italic">All escalation costs excluded · {isCommercial?"Commercial (ANS) rates":"EE Internal rates"}</span>
+      </div>
+
+      {/* Cost summary + PA breakdown side by side */}
+      <div className="flex gap-4 flex-wrap items-start">
+
+        {/* Main cost table */}
+        <div className="flex-1 min-w-[460px] bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-[#1e3a5f] text-white">
+                {["Item","Cost* ($)","Admin / ANS Burden ($)","Contract Value ($)","EE Internal ERP** ($)","EE Internal ERP incl overheads*** ($)","Comments"].map(h=>(
+                  <th key={h} className="px-2 py-2 font-semibold text-left whitespace-nowrap first:text-left text-right [&:first-child]:text-left">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {label:"Sub-Contract",            cost:totals.subCost, ans:totals.subANS, note:"Including 'Contractors' & 'Plants'"},
+                {label:"Materials",                cost:totals.matCost, ans:totals.matANS, note:""},
+                {label:"Essential Energy Internal Works", cost:totals.eeCost, ans:totals.eeANS, note:"Including 'Internal resources' & 'WAFHA of EE'"},
+              ].map(({label,cost,ans,note},i)=>{
+                const cv=cost+ans;
+                return (
+                  <tr key={i} className={i%2===0?"bg-white":"bg-gray-50"}>
+                    <td className="px-2 py-1.5 text-gray-800">{label}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(cost)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(ans)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(cv)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(cost)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(cv*1.866)}</td>
+                    <td className="px-2 py-1.5 text-gray-400 italic text-[10px]">{note}</td>
+                  </tr>
+                );
+              })}
+              <tr className="bg-gray-100">
+                <td className="px-2 py-1.5 text-gray-600">Contingency</td>
+                <td colSpan={2}></td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(totals.cont)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(totals.cont)}</td>
+                <td className="px-2 py-1.5 text-right tabular-nums">{fmtD(totals.cont*1.866)}</td>
+                <td></td>
+              </tr>
+              <tr className="bg-[#1e3a5f] text-white font-bold">
+                <td className="px-2 py-2">Total Estimated Cost</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmtD(totals.totalCost)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmtD(totals.totalANS)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmtD(totals.cv)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmtD(totals.totalCost)}</td>
+                <td className="px-2 py-2 text-right tabular-nums">{fmtD(totals.eeOH)}</td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+          <div className="px-3 py-2 border-t border-gray-100 text-[10px] text-gray-500 space-y-0.5">
+            <div className="font-semibold">Finance's Notes:</div>
+            <div>*Includes base cost, labour on-cost, fleet, and material on-cost</div>
+            <div>** Includes * + contingency</div>
+            <div>*** Includes ** + corporate &amp; network burden</div>
+            <div className="italic">All escalation costs have been excluded from financial reports.</div>
+          </div>
+        </div>
+
+        {/* Commercial PA breakdown */}
+        <div className="w-72 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-[#1e3a5f] text-white px-3 py-2 text-xs font-bold">Commercial Project Agreement Cost Breakdown</div>
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="px-3 py-1.5 text-left font-semibold text-gray-700">Component</th>
+                <th className="px-3 py-1.5 text-right font-semibold text-gray-700">Estimate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ["Project Management, Approvals and Administration", 0],
+                ["Design",                totals.eeCost*0.12],
+                ["Materials and contracts", totals.matCost+totals.subCost+totals.matANS+totals.subANS],
+                ["Construction",          totals.eeCost*0.63],
+                ["Commissioning",         totals.eeCost*0.25],
+                ["GST",                   totals.gst],
+              ].map(([lbl,val],i)=>(
+                <tr key={i} className={i%2===0?"bg-white":"bg-gray-50"}>
+                  <td className="px-3 py-1.5 text-gray-800">{lbl}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{val===0?"$\u00a0\u00a0\u00a0\u00a0\u00a0-":"$\u00a0"+val.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                </tr>
+              ))}
+              <tr className="bg-gray-100 font-semibold">
+                <td className="px-3 py-1.5 text-gray-800 text-[10px]">Estimated Construction Charges (GST exclusive) as at Execution Date</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">$ {totals.cv.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              </tr>
+              <tr className="bg-gray-100 font-semibold">
+                <td className="px-3 py-1.5 text-gray-800 text-[10px]">Estimated Construction Charges (GST inclusive) as at Execution Date</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">$ {totals.gstInc.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              </tr>
+              <tr className="bg-[#1e3a5f]/10">
+                <td className="px-3 py-1.5 font-bold text-[#1e3a5f]">Check</td><td></td>
+              </tr>
+              <tr className="bg-green-50">
+                <td className="px-3 py-1.5 text-gray-700">PA Sum</td>
+                <td className="px-3 py-1.5 text-right tabular-nums text-green-700 font-semibold">$ {totals.cv.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-1.5 text-gray-700">Summary Commercial Total</td>
+                <td className="px-3 py-1.5 text-right tabular-nums">$ {totals.cv.toLocaleString("en-AU",{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Cash Flow Chart */}
+      <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-3">
+        <div className="text-xs font-bold text-gray-700 mb-1 text-center">Cash Flow ($M)</div>
+        <svg width="100%" viewBox={`0 0 ${CW} ${CH}`} className="overflow-visible">
+          {[0,0.25,0.5,0.75,1].map(f=>{
+            const yv=PT+sy(f*maxY);
+            return <g key={f}>
+              <line x1={PL} y1={yv} x2={PL+W} y2={yv} stroke="#e5e7eb" strokeWidth="1"/>
+              <text x={PL-3} y={yv+3} textAnchor="end" fontSize="8" fill="#6b7280">{(f*maxY).toFixed(2)}</text>
+            </g>;
+          })}
+          <line x1={PL} y1={PT} x2={PL} y2={PT+H} stroke="#9ca3af" strokeWidth="1"/>
+          <line x1={PL} y1={PT+H} x2={PL+W} y2={PT+H} stroke="#9ca3af" strokeWidth="1"/>
+          <polyline points={pts("cumM")} fill="none" stroke="#eab308" strokeWidth="2"/>
+          <polyline points={pts("cumC")} fill="none" stroke="#1e3a5f" strokeWidth="2"/>
+          <polyline points={pts("cumE")} fill="none" stroke="#16a34a" strokeWidth="2"/>
+          {cashFlow.map((r,i)=>i%step!==0?null:(
+            <text key={i} x={PL+i*sx} y={PT+H+13} textAnchor="end" fontSize="8" fill="#6b7280"
+                  transform={`rotate(-45,${PL+i*sx},${PT+H+13})`}>{r.lbl}</text>
+          ))}
+          {[
+            {c:"#eab308",l:"Milestone Payments (Incoming Money)"},
+            {c:"#1e3a5f",l:"Cost + Contingency"},
+            {c:"#16a34a",l:"EE Internal ERP Costing incl overheads***"},
+          ].map(({c,l},i)=>(
+            <g key={i} transform={`translate(${PL+i*210},${CH-10})`}>
+              <line x1={0} y1={0} x2={16} y2={0} stroke={c} strokeWidth="2"/>
+              <text x={20} y={3} fontSize="8" fill="#374151">{l}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   const [saved,       setSaved]       = useState([]);
   const [search,      setSearch]      = useState("");
@@ -3545,6 +3776,7 @@ const EST_TABS = [
   {id:"equipment",label:"📦 Equipment"},
   {id:"review",   label:"📋 Review Lines"},
   {id:"summary",  label:"📊 Summary"},
+  {id:"financial", label:"💰 Financial Report"},
 ];
 
 export default function App() {
@@ -3766,6 +3998,7 @@ export default function App() {
                 {estTab==="equipment"    && <EquipmentScreen lines={lines} setLines={setLines} isCommercial={isCommercial} inv={inv}/>}
                 {estTab==="review"    && <ReviewLines lines={lines} isCommercial={isCommercial}/>}
                 {estTab==="summary"   && <SummaryScreen inv={inv} lines={lines} isCommercial={isCommercial} equipSel={equipSel} onSave={saveInvestment} lastSaved={lastSaved}/>}
+                {estTab==="financial" && <FinancialScreen inv={inv} lines={lines} isCommercial={isCommercial}/>}
               </div>
             </>
           )}
