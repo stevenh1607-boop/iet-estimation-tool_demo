@@ -1713,6 +1713,9 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
   },{commHrs:0,eeInt:0,comm:0,lines:0});
   if(phase4.commHrs>0) byPhase["4"]={...phase4,installHrs:0,eeLabCost:phase4.eeInt,contrCost:0,matCost:0};
 
+  // commGrandHrs available locally for WBS table column
+  const commGrandHrs = phase4.commHrs;
+
   const grandEE   = Object.values(byPhase).reduce((a,p)=>a+p.eeInt,0);
   const grandComm = Object.values(byPhase).reduce((a,p)=>a+p.comm,0);
   const contPct   = parseFloat(isCommercial?inv.contComm:inv.contInt)||10;
