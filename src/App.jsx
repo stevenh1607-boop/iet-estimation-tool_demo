@@ -1438,7 +1438,6 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <div className="text-xs text-gray-500">
                             <div className="font-semibold mb-1 text-gray-600">Hours this item</div>
                             <div className="font-bold text-purple-700">{fmtHrs(c.installHrs)} install</div>
-                            <div className="font-bold text-teal-700">{fmtHrs(c.commHrs)} comm</div>
                           </div>
                         )}
                       </div>
@@ -1517,7 +1516,6 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             <div className="text-xs font-bold text-blue-800 mb-2 uppercase tracking-wide truncate">{l4label}</div>
             {[
               {label:"Install Hours",value:fmtHrs(groupTotals.installHrs),color:"text-purple-700",bg:"bg-purple-50 border border-purple-100"},
-              {label:"Commission Hours",value:fmtHrs(commGroups[selectedL4]?.totalHrs || 0),color:"text-teal-700",bg:"bg-teal-50 border border-teal-100"},
             ].map(r=>(
               <div key={r.label} className={`flex justify-between items-center py-1 px-2 rounded mb-1 ${r.bg}`}>
                 <span className="text-xs text-gray-600">{r.label}</span>
@@ -1538,7 +1536,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             <div className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide border-b pb-1">Investment Totals</div>
             {[
               {label:"Install Hours",value:fmtHrs(investTotals.installHrs),color:"text-purple-700"},
-              {label:"Commission Hrs",value:fmtHrs(commGrandHrs),color:"text-teal-700"},
+              {label:"Phase 4 Comm Hrs",value:fmtHrs(commGrandHrs),color:"text-teal-700"},
             ].map(r=>(
               <div key={r.label} className="flex justify-between items-center py-1 border-b border-gray-100">
                 <span className="text-xs text-gray-600">{r.label}</span>
@@ -1633,7 +1631,6 @@ function ReviewLines({ lines, isCommercial }) {
                   <th className="text-center px-3 py-2 font-semibold text-gray-500">Qty</th>
                   <th className="text-center px-3 py-2 font-semibold text-gray-500">UOM</th>
                   <th className="text-right px-3 py-2 font-semibold text-purple-600">Install Hrs</th>
-                  <th className="text-right px-3 py-2 font-semibold text-teal-600">Comm Hrs</th>
                   <th className="text-right px-3 py-2 font-semibold text-blue-700">EE Internal</th>
                   {isCommercial && <th className="text-right px-3 py-2 font-semibold text-orange-700">Commercial</th>}
                   <th className="text-left px-3 py-2 font-semibold text-gray-500">Delivery</th>
@@ -1650,7 +1647,7 @@ function ReviewLines({ lines, isCommercial }) {
                       <td className="px-3 py-2 text-center font-bold text-orange-700">{ln.qty}</td>
                       <td className="px-3 py-2 text-center text-gray-500">{item.uom||"EA"}</td>
                       <td className="px-3 py-2 text-right font-medium text-purple-700">{fmtHrs(c.installHrs)}</td>
-                      <td className="px-3 py-2 text-right font-medium text-teal-700">{fmtHrs(c.commHrs)}</td>
+
                       <td className="px-3 py-2 text-right font-bold text-blue-800">{fmt(c.eeInt)}</td>
                       {isCommercial && <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(c.comm)}</td>}
                       <td className="px-3 py-2 text-gray-500">{c.isContr?"Contractor":"EE"}</td>
@@ -1838,7 +1835,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
           onClick={()=>!isLeaf && childCodes.length>0 && toggleNode(code)}
           className={`grid items-center border-b text-xs cursor-pointer hover:bg-yellow-50 ${bgColors[depth]||"bg-white"}
             ${depth<=2?"border-b-gray-300 border-b-2":"border-b-gray-100"}`}
-          style={{gridTemplateColumns: isCommercial?"1fr 80px 80px 90px 90px":"1fr 80px 80px 90px",paddingLeft:`${indent}px`}}>
+          style={{gridTemplateColumns: isCommercial?"1fr 80px 90px 90px":"1fr 80px 90px",paddingLeft:`${indent}px`}}>
           <div className={`py-1.5 pr-2 flex items-center gap-1 ${textColors[depth]||"text-gray-600"}`}>
             {!isLeaf && childCodes.length>0 && (
               <span className="text-gray-400 w-3 flex-shrink-0">{isOpen?"▾":"▸"}</span>
@@ -1848,7 +1845,6 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
             <span className={`truncate ${fontWeights[depth]||""}`}>{desc}</span>
           </div>
           <div className={`py-1.5 text-center text-purple-700 ${depth<=2?"font-bold":"font-medium"}`}>{roll.installHrs>0?fmtHrs(roll.installHrs):"—"}</div>
-          <div className={`py-1.5 text-center text-teal-700 ${depth<=2?"font-bold":"font-medium"}`}>{roll.commHrs>0?fmtHrs(roll.commHrs):"—"}</div>
           <div className={`py-1.5 text-right pr-2 text-blue-800 ${depth<=2?"font-bold":"font-medium"}`}>{fmt(roll.eeInt)}</div>
           {isCommercial && <div className={`py-1.5 text-right pr-2 text-orange-700 ${depth<=2?"font-bold":"font-medium"}`}>{fmt(roll.comm)}</div>}
         </div>
@@ -1896,7 +1892,8 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
               {ph==="4" && <div className="text-xs text-teal-600 mb-1">auto-derived</div>}
               <div className="text-sm font-bold text-blue-800">{fmt(p.eeInt)}</div>
               {isCommercial && <div className="text-xs font-bold text-orange-700">{fmt(p.comm)}</div>}
-              <div className="text-xs text-purple-600 mt-1">{fmtHrs(p.installHrs+p.commHrs)}</div>
+              {p.installHrs>0 && <div className="text-xs text-purple-600 mt-1">{fmtHrs(p.installHrs)} install hrs</div>}
+              {ph==="4" && p.commHrs>0 && <div className="text-xs text-teal-600 mt-0.5">{fmtHrs(p.commHrs)} comm hrs</div>}
             </div>
           ))}
           {Object.keys(byPhase).length===0 && (
@@ -1920,10 +1917,9 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
             </div>
             {/* Column headers */}
             <div className="grid border-b bg-gray-50 text-xs font-semibold text-gray-500"
-              style={{gridTemplateColumns: isCommercial?"1fr 80px 80px 90px 90px":"1fr 80px 80px 90px"}}>
+              style={{gridTemplateColumns: isCommercial?"1fr 80px 90px 90px":"1fr 80px 90px"}}>
               <div className="px-3 py-2">WBS / Description</div>
               <div className="py-2 text-center text-purple-600">Install Hrs</div>
-              <div className="py-2 text-center text-teal-600">Comm Hrs</div>
               <div className="py-2 text-right pr-2 text-blue-700">EE Internal</div>
               {isCommercial && <div className="py-2 text-right pr-2 text-orange-700">Commercial</div>}
             </div>
@@ -1931,10 +1927,9 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
             {phaseNodes.map(ph => renderWBSNode(ph, 1))}
             {/* Grand total footer */}
             <div className="grid border-t-2 border-gray-300 bg-gray-50 text-xs font-bold"
-              style={{gridTemplateColumns: isCommercial?"1fr 80px 80px 90px 90px":"1fr 80px 80px 90px"}}>
+              style={{gridTemplateColumns: isCommercial?"1fr 80px 90px 90px":"1fr 80px 90px"}}>
               <div className="px-3 py-2 text-gray-700">Total (excl. contingency)</div>
               <div className="py-2 text-center text-purple-700">{Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.installHrs,0)>0?fmtHrs(Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.installHrs,0)):"—"}</div>
-              <div className="py-2 text-center text-teal-700">{Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.commHrs,0)>0?fmtHrs(Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.commHrs,0)):"—"}</div>
               <div className="py-2 text-right pr-2 text-blue-900 text-sm">{fmt(grandEE)}</div>
               {isCommercial && <div className="py-2 text-right pr-2 text-orange-800 text-sm">{fmt(grandComm)}</div>}
             </div>
