@@ -2062,6 +2062,14 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   const [sortDir,     setSortDir]     = useState("desc");
   const [selected,    setSelected]    = useState(null);
   const [editStatus,  setEditStatus]  = useState(null); // id of investment being status-edited
+  const [showCloneModal, setShowCloneModal] = useState(false);
+  const [cloneSource,    setCloneSource]    = useState(null);
+  const [cloneClass,     setCloneClass]     = useState("Class 4");
+  const [cloneStatus,    setCloneStatus]    = useState("Draft");
+  const [showImport,     setShowImport]     = useState(false);
+  const [importText,     setImportText]     = useState("");
+  const [importError,    setImportError]    = useState("");
+  const [importPreview,  setImportPreview]  = useState(null);
 
   // Load from localStorage on mount and on focus
   const load = () => {
@@ -2083,6 +2091,65 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
     setSaved(updated);
     localStorage.setItem("iet_investments", JSON.stringify(updated));
     if (selected?.id===id) setSelected(null);
+  };
+
+  // Clone an investment — creates a new record with a new class, preserving all lines
+  // Records cloned_from_id lineage for tracking Class 5→4→3→2 progression
+  const CLASS_ORDER = ["Class 5","Class 4","Class 3","Class 2","Class 1"];
+  const cloneInvestment = () => {
+    if (!cloneSource) return;
+    const newId = `inv_${Date.now()}`;
+    const promoted = {
+      ...cloneSource,
+      id: newId,
+      savedAt: new Date().toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
+      savedAtISO: new Date().toISOString(),
+      status: cloneStatus,
+      cloned_from_id: cloneSource.id,
+      cloned_from_class: cloneSource.inv.estClass,
+      inv: { ...cloneSource.inv, estClass: cloneClass },
+    };
+    const updated = [...saved, promoted];
+    setSaved(updated);
+    localStorage.setItem("iet_investments", JSON.stringify(updated));
+    setShowCloneModal(false);
+    setCloneSource(null);
+    setSelected(promoted);
+  };
+
+  // Parse imported JSON — accepts a raw IET save blob or minimal JSON
+  const parseImport = (text) => {
+    setImportError("");
+    setImportPreview(null);
+    try {
+      const raw = JSON.parse(text.trim());
+      // Accept either a single save object or an array
+      const obj = Array.isArray(raw) ? raw[0] : raw;
+      if (!obj || !obj.inv) { setImportError("JSON must contain an 'inv' object with investment details."); return; }
+      setImportPreview(obj);
+    } catch(e) {
+      setImportError("Invalid JSON — paste the full contents of a saved IET export file.");
+    }
+  };
+
+  const confirmImport = () => {
+    if (!importPreview) return;
+    const newId = `inv_${Date.now()}`;
+    const imported = {
+      ...importPreview,
+      id: newId,
+      savedAt: new Date().toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
+      savedAtISO: new Date().toISOString(),
+      status: importPreview.status || "Draft",
+      _imported: true,
+    };
+    const updated = [...saved, imported];
+    setSaved(updated);
+    localStorage.setItem("iet_investments", JSON.stringify(updated));
+    setShowImport(false);
+    setImportText("");
+    setImportPreview(null);
+    setSelected(imported);
   };
 
   // Completion %: lines entered / total supply lines for that investment
@@ -2204,7 +2271,6 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
     if (sortBy==="name")      { av=a.inv.name;      bv=b.inv.name; }
     else if (sortBy==="comm") { av=a.totalComm;     bv=b.totalComm; }
     else if (sortBy==="ee")   { av=a.totalEE;       bv=b.totalEE; }
-    else if (sortBy==="comp") { av=completion(a)||0; bv=completion(b)||0; }
     else { av=a.savedAtISO||a.savedAt; bv=b.savedAtISO||b.savedAt; }
     return sortDir==="asc" ? (av>bv?1:-1) : (av<bv?1:-1);
   });
@@ -2234,6 +2300,10 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             <div className="text-xs text-gray-400">{filtered.length} of {saved.length} investments · Portfolio: {fmt(portTotals.comm)} commercial · {fmt(portTotals.ee)} EE internal</div>
           </div>
           <div className="flex-1"/>
+          <button onClick={()=>setShowImport(true)}
+            className="border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs px-3 py-2 rounded font-semibold flex items-center gap-1.5">
+            📥 Import Estimate
+          </button>
           <button onClick={onNew}
             className="bg-orange-600 hover:bg-orange-500 text-white text-xs px-4 py-2 rounded font-bold flex items-center gap-1.5 shadow">
             ＋ New Estimate
@@ -2297,7 +2367,6 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                   <th className="px-3 py-2 font-semibold text-gray-500 text-center">Rev</th>
                   <th className="px-3 py-2 font-semibold text-gray-500 text-left">Estimator</th>
                   <th className="px-3 py-2 font-semibold text-gray-500 text-left">Reviewer</th>
-                  <th className="px-3 py-2 font-semibold text-center"><SortBtn col="comp" label="Complete"/></th>
                   <th className="px-3 py-2 font-semibold text-right"><SortBtn col="ee" label="EE Internal"/></th>
                   <th className="px-3 py-2 font-semibold text-right"><SortBtn col="comm" label="Commercial"/></th>
                   <th className="px-3 py-2 font-semibold text-gray-500 text-right"><SortBtn col="savedAt" label="Saved"/></th>
@@ -2308,7 +2377,6 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                 {filtered.map(s=>{
                   const sc    = STATUS_CFG[s.status||"Draft"] || STATUS_CFG.Draft;
                   const cc    = CLASS_COLOR[s.inv.estClass]   || "bg-gray-100 text-gray-500";
-                  const comp  = completion(s);
                   const isSel = selected?.id===s.id;
                   return (
                     <tr key={s.id}
@@ -2339,19 +2407,6 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                       <td className="px-3 py-2 text-center text-gray-500 font-mono">{s.inv.revision}</td>
                       <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{s.inv.estimatedBy}</td>
                       <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{s.inv.reviewedBy}</td>
-                      <td className="px-3 py-2 text-center">
-                        {comp !== null ? (
-                          <div className="flex items-center gap-1.5 justify-center">
-                            <div className="w-16 bg-gray-200 rounded-full h-1.5">
-                              <div className={`h-1.5 rounded-full ${comp>=75?"bg-green-500":comp>=50?"bg-blue-500":comp>=25?"bg-yellow-500":"bg-red-400"}`}
-                                style={{width:`${comp}%`}}/>
-                            </div>
-                            <span className={`font-mono font-bold ${comp>=75?"text-green-600":comp>=50?"text-blue-600":comp>=25?"text-yellow-600":"text-red-500"}`}>
-                              {comp}%
-                            </span>
-                          </div>
-                        ) : <span className="text-gray-300">—</span>}
-                      </td>
                       <td className="px-3 py-2 text-right font-bold text-blue-800">{fmt(s.totalEE)}</td>
                       <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(s.totalComm)}</td>
                       <td className="px-3 py-2 text-right text-gray-400 whitespace-nowrap">{s.savedAt}</td>
@@ -2372,9 +2427,6 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                 <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                   <tr>
                     <td className="px-3 py-2 font-bold text-gray-700" colSpan={6}>Portfolio Total ({filtered.length} investments)</td>
-                    <td className="px-3 py-2 text-center text-gray-500">
-                      {Math.round(filtered.reduce((a,s)=>a+(completion(s)||0),0)/filtered.length)}% avg
-                    </td>
                     <td className="px-3 py-2 text-right font-bold text-blue-900">{fmt(portTotals.ee)}</td>
                     <td className="px-3 py-2 text-right font-bold text-orange-800">{fmt(portTotals.comm)}</td>
                     <td colSpan={2}/>
@@ -2419,18 +2471,28 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               ))}
             </div>
 
-            {/* Completion bar */}
-            {completion(selected) !== null && (
+
+
+            {/* Clone Lineage */}
+            {(selected.cloned_from_id || saved.some(s=>s.cloned_from_id===selected.id)) && (
               <div className="px-3 py-3 border-b">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-gray-500 font-semibold">Estimate Completion</span>
-                  <span className="font-bold text-blue-700">{completion(selected)}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div className={`h-3 rounded-full transition-all ${completion(selected)>=75?"bg-green-500":completion(selected)>=50?"bg-blue-500":completion(selected)>=25?"bg-yellow-500":"bg-red-400"}`}
-                    style={{width:`${completion(selected)}%`}}/>
-                </div>
-                <div className="text-xs text-gray-400 mt-1">{selected.linesCount} of {selected.totalSupplyLines} lines</div>
+                <div className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Estimate Lineage</div>
+                {selected.cloned_from_id && (()=>{
+                  const parent = saved.find(s=>s.id===selected.cloned_from_id);
+                  return <div className="flex items-center gap-2 text-xs mb-1.5">
+                    <span className="text-gray-400">Promoted from</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[selected.cloned_from_class]||"bg-gray-100 text-gray-500"}`}>{selected.cloned_from_class}</span>
+                    {parent && <span className="text-gray-600 font-semibold truncate max-w-[120px]">{parent.inv.name}</span>}
+                  </div>;
+                })()}
+                {saved.filter(s=>s.cloned_from_id===selected.id).map(child=>(
+                  <div key={child.id} className="flex items-center gap-2 text-xs mt-1">
+                    <span className="text-gray-400">↳ Promoted to</span>
+                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[child.inv.estClass]||"bg-gray-100 text-gray-500"}`}>{child.inv.estClass}</span>
+                    <span className="text-gray-600 font-semibold truncate max-w-[100px]">{child.inv.name}</span>
+                    <button onClick={()=>setSelected(child)} className="ml-auto text-blue-600 hover:underline text-[10px]">View</button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -2477,6 +2539,10 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               className="w-full bg-blue-700 hover:bg-blue-600 text-white text-xs py-2 rounded font-semibold">
               📐 Open in Estimation Tool
             </button>
+            <button onClick={()=>{setCloneSource(selected);const idx=CLASS_ORDER.indexOf(selected.inv.estClass);setCloneClass(idx>0?CLASS_ORDER[idx-1]:"Class 4");setShowCloneModal(true);}}
+              className="w-full bg-purple-700 hover:bg-purple-600 text-white text-xs py-2 rounded font-semibold">
+              🔁 Clone / Promote Estimate Class
+            </button>
             <div className="flex gap-2">
               <button onClick={()=>exportPDF(selected)}
                 className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-blue-400">📄 Export PDF</button>
@@ -2484,6 +2550,143 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               <button onClick={()=>del(selected.id)}
                 className="border border-red-200 text-red-500 text-xs px-2 py-1.5 rounded hover:bg-red-50">✕</button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ── CLONE / PROMOTE MODAL ── */}
+      {showCloneModal && cloneSource && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=>setShowCloneModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[440px]" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl">🔁</span>
+              <div>
+                <div className="font-bold text-gray-900">Clone & Promote Estimate</div>
+                <div className="text-xs text-gray-500">Creates a new estimate at the promoted class, preserving all lines. The source is kept as-is.</div>
+              </div>
+            </div>
+
+            {/* Source summary */}
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">Source estimate</div>
+              <div className="font-semibold text-gray-800">{cloneSource.inv.name}</div>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[cloneSource.inv.estClass]||""}`}>{cloneSource.inv.estClass}</span>
+                <span className="text-xs text-gray-400">{cloneSource.inv.number}</span>
+                <span className="text-xs text-gray-400">·</span>
+                <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${STATUS_CFG[cloneSource.status||"Draft"]?.bg} ${STATUS_CFG[cloneSource.status||"Draft"]?.text}`}>{cloneSource.status||"Draft"}</span>
+              </div>
+            </div>
+
+            {/* Arrow */}
+            <div className="text-center text-gray-400 text-lg mb-4">↓ promote to</div>
+
+            {/* Target class + status */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">New Estimate Class</label>
+                <select value={cloneClass} onChange={e=>setCloneClass(e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400">
+                  {CLASS_ORDER.map(c=><option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Initial Status</label>
+                <select value={cloneStatus} onChange={e=>setCloneStatus(e.target.value)}
+                  className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400">
+                  {["Draft","In Review","Approved","On Hold"].map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-400 bg-blue-50 border border-blue-100 rounded p-2 mb-4">
+              💡 All estimate lines, quantities, factors and costs are copied exactly. The clone is linked back to this source — the lineage chain is visible in the detail panel.
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={()=>setShowCloneModal(false)}
+                className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
+              <button onClick={cloneInvestment}
+                className="flex-1 bg-purple-700 hover:bg-purple-600 text-white text-sm py-2 rounded-lg font-bold">
+                🔁 Clone to {cloneClass}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── IMPORT / UPGRADE MODAL ── */}
+      {showImport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=>{setShowImport(false);setImportText("");setImportPreview(null);setImportError("");}}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[560px]" onClick={e=>e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-2xl">📥</span>
+              <div>
+                <div className="font-bold text-gray-900">Import Existing Estimate</div>
+                <div className="text-xs text-gray-500">Paste the JSON export from a previously saved IET estimate to bring it into the Investment Hub.</div>
+              </div>
+            </div>
+
+            {!importPreview ? (
+              <>
+                <div className="mb-3">
+                  <label className="text-xs text-gray-500 block mb-1">Paste saved estimate JSON</label>
+                  <textarea
+                    value={importText}
+                    onChange={e=>{ setImportText(e.target.value); if(e.target.value.trim()) parseImport(e.target.value); else { setImportError(""); setImportPreview(null); }}}
+                    placeholder={'{
+  "inv": { "name": "My Investment", "number": "10012345", ... },
+  "lines": { ... },
+  ...
+}'}
+                    rows={10}
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"/>
+                </div>
+                {importError && (
+                  <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mb-3">⚠ {importError}</div>
+                )}
+                <div className="text-xs text-gray-400 bg-amber-50 border border-amber-100 rounded p-2 mb-4">
+                  💡 To export a saved estimate: open it from the Investment Hub → Save tab, then use your browser's developer tools or the app's export function to copy the JSON. In the full Power Platform build this will connect directly to Dataverse.
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={()=>{setShowImport(false);setImportText("");setImportError("");}}
+                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
+                  <button onClick={()=>parseImport(importText)} disabled={!importText.trim()}
+                    className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-300 text-white text-sm py-2 rounded-lg font-bold">
+                    Validate JSON →
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                  <div className="text-xs font-bold text-green-700 mb-2">✓ Valid estimate found</div>
+                  {[
+                    ["Investment Name",  importPreview.inv?.name||"—"],
+                    ["Number",           importPreview.inv?.number||"—"],
+                    ["Estimate Class",   importPreview.inv?.estClass||"—"],
+                    ["Type",             importPreview.inv?.type||"—"],
+                    ["Estimator",        importPreview.inv?.estimatedBy||"—"],
+                    ["Lines",            importPreview.linesCount!=null ? `${importPreview.linesCount} entered` : "—"],
+                    ["EE Internal",      importPreview.totalEE!=null ? fmt(importPreview.totalEE) : "—"],
+                    ["Commercial",       importPreview.totalComm!=null ? fmt(importPreview.totalComm) : "—"],
+                  ].map(([label,val])=>(
+                    <div key={label} className="flex justify-between text-xs py-0.5">
+                      <span className="text-gray-500">{label}</span>
+                      <span className="font-semibold text-gray-800">{val}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs text-gray-400 mb-4">The estimate will be added to your Investment Hub as a new entry. All existing estimates are unchanged.</div>
+                <div className="flex gap-3">
+                  <button onClick={()=>{ setImportPreview(null); }}
+                    className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50">← Back</button>
+                  <button onClick={confirmImport}
+                    className="flex-1 bg-green-700 hover:bg-green-600 text-white text-sm py-2 rounded-lg font-bold">
+                    📥 Import to Hub
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
