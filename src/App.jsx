@@ -14,7 +14,8 @@ const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equip
 // ── COPPERLEAF CSV EXPORT ────────────────────────────────────────
 // Replicates the Sync_To_C55 macro: GROUP rows for WBS hierarchy,
 // SPEND rows per resource type with monthly S-curve distribution + escalation.
-function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial) {
+// Separate B-rows for PCE/LLT materials with equipment metadata.
+function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup) {
   const isComm = inv.type === "Commercially Funded";
 
   // ── Project timeline ──────────────────────────────────────────
@@ -153,65 +154,68 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
       csvRows.push(writeGroupRow(l3, `${l3} - Group`, 3));
     }
 
-    // Aggregate costs by resource type for this L3
-    const costByResource = {}; // resource_name → {hours, dollars, matDollars}
+    // Aggregate LABOUR costs by resource type (A-rows)
+    const costByResource = {}; // resource_name → {hours, dollars}
 
     items.forEach(item => {
       const ln = lines[item.wbs_code] || {};
-      const qty    = parseFloat(ln.qty||"0");
-      const factor = parseFloat(ln.factor||"1");
-      const effQty = qty * factor;
       const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial);
       const isContr = (ln.delivery||item.delivery_method||"") === "Contractor Delivered";
       const res = isContr ? "Contractor" : (item.resource_main || "ZS Electrical Technician");
-
-      // Labour hours
       if (!costByResource[res]) costByResource[res] = {hours:0, dollars:0};
       const isHourBased = getCurrencyType(res) === "Hour";
-      if (isHourBased) {
-        costByResource[res].hours += c.installHrs || 0;
-      } else {
-        costByResource[res].dollars += c.contrCost || 0;
-      }
-
-      // Materials
-      if (c.equipCost > 0) {
-        const matRes = "Materials (Non-LLT)";
-        if (!costByResource[matRes]) costByResource[matRes] = {hours:0, dollars:0};
-        costByResource[matRes].dollars += c.equipCost * (isCommercial ? 1 + ANS_MAT : 1);
-      }
+      if (isHourBased) { costByResource[res].hours += c.installHrs || 0; }
+      else             { costByResource[res].dollars += c.contrCost || 0; }
     });
 
-    // Write SPEND rows — distribute evenly across phase months with escalation
+    // A-rows: one per resource type (labour/contractor)
     Object.entries(costByResource).forEach(([resName, costs]) => {
       const rc = getResCode(resName);
       const acct = getAcctCode(resName);
       const currType = getCurrencyType(resName);
       const totalVal = currType === "Hour" ? costs.hours : costs.dollars;
       if (totalVal <= 0) return;
+      const ef = escFactor(phase, currType !== "Hour" ? "contractors" : "internal_ee");
+      const perMonth = phMonths.length > 0 ? totalVal*(1+ef) / phMonths.length : 0;
+      const row = Array(allHeaders.length).fill("");
+      row[0]=buildGroupPath(l1,l2,l3); row[1]=`${l3} - Group`; row[2]=l3;
+      row[3]="Spend"; row[4]="Unit"; row[5]=resName; row[6]=currType;
+      row[7]="0"; row[8]=acct; row[9]=rc; row[10]=resourceCodes[resName]?.labour_type||"";
+      phMonths.forEach(m=>{ const ci=staticHeaders.length+(m-1); if(ci<row.length) row[ci]=perMonth.toFixed(2); });
+      csvRows.push(row);
+    });
 
-      const ef = escFactor(phase, costs.dollars > 0 && currType !== "Hour" ? "contractors" : "internal_ee");
-      const totalEscalated = totalVal * (1 + ef);
-      const perMonth = phMonths.length > 0 ? totalEscalated / phMonths.length : 0;
+    // B-rows: one per supply item that has a PCE/LLT price
+    items.forEach(item => {
+      const ln = lines[item.wbs_code] || {};
+      const qty    = parseFloat(ln.qty||"0");
+      const factor = parseFloat(ln.factor||"1");
+      const effQty = qty * factor;
+      if (effQty <= 0) return;
+      const matPrice = parseFloat(ln.mats||"") || item.pce_price || 0;
+      if (matPrice <= 0) return;
+
+      // Equipment metadata from equipLookup
+      const eq = equipLookup ? equipLookup[item.wbs_code] : null;
+      const isLLT = eq ? (eq.lead_time_weeks > 20) : false;
+      const spendName = isLLT ? "Materials (LLT)" : "Materials (Non-LLT)";
+      const ef = escFactor(phase, "materials");
+      const totalMat = effQty * matPrice * (isCommercial ? 1+ANS_MAT : 1) * (1+ef);
+      const perMonth = phMonths.length > 0 ? totalMat / phMonths.length : 0;
+      const acct = isComm ? "001000" : "001001";
 
       const row = Array(allHeaders.length).fill("");
-      row[0] = buildGroupPath(l1, l2, l3); // Group Path
-      row[1] = `${l3} - Group`;
-      row[2] = l3;
-      row[3] = "Spend";
-      row[4] = "Unit";
-      row[5] = resName;
-      row[6] = currType;
-      row[7] = "0"; // Is Unshiftable
-      row[8] = acct;
-      row[9] = rc;
-      row[10] = resourceCodes[resName]?.labour_type || "";
-
-      // Monthly distribution
-      phMonths.forEach(m => {
-        const colIdx = staticHeaders.length + (m - 1);
-        if (colIdx < row.length) row[colIdx] = perMonth.toFixed(2);
-      });
+      row[0]=buildGroupPath(l1,l2,l3); row[1]=`${l3} - Group`; row[2]=l3;
+      row[3]="Spend"; row[4]="Unit"; row[5]=spendName; row[6]="Dollar";
+      row[7]="0"; row[8]=acct; row[9]="GMAT"; row[10]="";
+      // LLT metadata (cols 11–16)
+      row[11] = (eq?.description || item.description || "").substring(0,100);
+      row[12] = eq?.category || "";
+      row[13] = String(effQty);
+      row[14] = [eq?.make, eq?.model].filter(Boolean).join(" ");
+      row[15] = eq?.contract_no || "";
+      row[16] = eq?.source==="SCADA"?"SCADA": eq?.source==="Comms"?"Comms": (eq?.family||"");
+      phMonths.forEach(m=>{ const ci=staticHeaders.length+(m-1); if(ci<row.length) row[ci]=perMonth.toFixed(2); });
       csvRows.push(row);
     });
   });
@@ -1333,7 +1337,7 @@ function ReviewLines({ lines, isCommercial }) {
 
 // ── SUMMARY SCREEN ───────────────────────────────────────────────
 function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }) {
-  const { supply, wbs: wbsMaster, commLookup, commProfiles, escRates, resourceCodes } = useData();
+  const { supply, wbs: wbsMaster, commLookup, commProfiles, escRates, resourceCodes, equipLookup } = useData();
   const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
   const [openNodes, setOpenNodes] = useState({}); // {wbs_code: bool}
 
@@ -1540,7 +1544,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
               {lastSaved && <span className="text-xs text-green-600">✓ Saved {lastSaved}</span>}
               <button onClick={onSave} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded font-semibold shadow">💾 Save Investment</button>
               <button onClick={()=>{
-                const csv = generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial);
+                const csv = generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup);
                 const suffix = isCommercial ? "ANS_RATES" : "EE_RATES";
                 const filename = `${inv.number||"IET"}_${suffix}_Copperleaf.csv`;
                 downloadCSV(csv, filename);
