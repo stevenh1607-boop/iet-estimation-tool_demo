@@ -978,12 +978,14 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
 
   const groupTotals = useMemo(()=>items.reduce((a,it)=>{
     const c=calcItem(it);
-    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs+c.commHrs,eeTotal:a.eeTotal+c.eeInt,commTotal:a.commTotal+c.comm};
+    // commHrs from supply items must NOT appear in construction totals —
+    // commissioning hours are accounted for separately via Phase 4 commTotals
+    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs,eeTotal:a.eeTotal+c.eeInt,commTotal:a.commTotal+c.comm};
   },{installHrs:0,commHrs:0,eeTotal:0,commTotal:0}),[items,calcItem]);
 
   const investTotals = useMemo(()=>supply.reduce((a,it)=>{
     const c=calcItem(it);
-    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs+c.commHrs,eeTotal:a.eeTotal+c.eeInt,commTotal:a.commTotal+c.comm};
+    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs,eeTotal:a.eeTotal+c.eeInt,commTotal:a.commTotal+c.comm};
   },{installHrs:0,commHrs:0,eeTotal:0,commTotal:0}),[supply,calcItem]);
 
   const linesEntered = Object.values(lines).filter(l=>parseFloat(l.qty)>0 && !l._commOvrd).length;
@@ -1515,7 +1517,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             <div className="text-xs font-bold text-blue-800 mb-2 uppercase tracking-wide truncate">{l4label}</div>
             {[
               {label:"Install Hours",value:fmtHrs(groupTotals.installHrs),color:"text-purple-700",bg:"bg-purple-50 border border-purple-100"},
-              {label:"Commission Hours",value:fmtHrs(groupTotals.commHrs),color:"text-teal-700",bg:"bg-teal-50 border border-teal-100"},
+              {label:"Commission Hours",value:fmtHrs(commGroups[selectedL4]?.totalHrs || 0),color:"text-teal-700",bg:"bg-teal-50 border border-teal-100"},
             ].map(r=>(
               <div key={r.label} className={`flex justify-between items-center py-1 px-2 rounded mb-1 ${r.bg}`}>
                 <span className="text-xs text-gray-600">{r.label}</span>
@@ -1536,7 +1538,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             <div className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide border-b pb-1">Investment Totals</div>
             {[
               {label:"Install Hours",value:fmtHrs(investTotals.installHrs),color:"text-purple-700"},
-              {label:"Commission Hrs",value:fmtHrs(investTotals.commHrs),color:"text-teal-700"},
+              {label:"Commission Hrs",value:fmtHrs(commGrandHrs),color:"text-teal-700"},
             ].map(r=>(
               <div key={r.label} className="flex justify-between items-center py-1 border-b border-gray-100">
                 <span className="text-xs text-gray-600">{r.label}</span>
@@ -1572,7 +1574,7 @@ function ReviewLines({ lines, isCommercial }) {
   const totals = entered.reduce((a,item)=>{
     const ln=lines[item.wbs_code]||{};
     const c=calcLine(item,ln.qty||"",ln.factor||"1",ln.delivery,ln.instHrsOvrd,ln.contrRate,ln.plant,ln.mats,isCommercial,ln.resourceOvrd,null,0);
-    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs+c.commHrs,eeInt:a.eeInt+c.eeInt,comm:a.comm+c.comm};
+    return {installHrs:a.installHrs+c.installHrs,commHrs:a.commHrs,eeInt:a.eeInt+c.eeInt,comm:a.comm+c.comm};
   },{installHrs:0,commHrs:0,eeInt:0,comm:0});
 
   if (entered.length===0) return (
@@ -1682,7 +1684,9 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
     const ln=lines[item.wbs_code]||{};
     const c=calcLine(item,ln.qty||"",ln.factor||"1",ln.delivery,ln.instHrsOvrd,ln.contrRate,ln.plant,ln.mats,isCommercial,ln.resourceOvrd,null,0);
     byPhase[ph].eeInt+=c.eeInt; byPhase[ph].comm+=c.comm;
-    byPhase[ph].installHrs+=c.installHrs; byPhase[ph].commHrs+=c.commHrs;
+    byPhase[ph].installHrs+=c.installHrs;
+    // commHrs from supply items excluded from construction phase —
+    // they appear only in Phase 4 via the commissioning derivation below
     byPhase[ph].lines++;
     byPhase[ph].eeLabCost  += c.eeLabCost  || 0;
     byPhase[ph].contrCost  += c.contrCost  || 0;
@@ -1778,7 +1782,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
         m[ancestor].eeInt      += vals.eeInt;
         m[ancestor].comm       += vals.comm;
         m[ancestor].installHrs += vals.installHrs;
-        m[ancestor].commHrs    += vals.commHrs;
+        m[ancestor].commHrs    += vals.commHrs; // only populated from Phase 4 commissioning rows
         m[ancestor].lines      += 1;
       }
     };
