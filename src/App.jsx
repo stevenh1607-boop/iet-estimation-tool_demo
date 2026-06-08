@@ -1738,29 +1738,75 @@ function FinancialScreen({ inv, lines, isCommercial }) {
   const { supply } = useData();
 
   const totals = useMemo(() => {
+    // Mirrors Financial Report sheet exactly:
+    // Sub-Contract  = contractor cost + plant (contractor delivered items)
+    // Materials     = equipment/PCE cost (supply items with pce_price)
+    // EE Internal   = EE labour cost + plant (EE delivered items) + WAFHA
     let subCost=0, matCost=0, eeCost=0;
     let subANS=0,  matANS=0,  eeANS=0;
+
     supply.forEach(item => {
       const ln = lines[item.wbs_code] || {};
       if (!parseFloat(ln.qty||"0")) return;
       const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery,
-                         ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial);
+                         ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial,
+                         ln.resourceOvrd);
       const isContr = (ln.delivery||item.delivery_method||"") === "Contractor Delivered";
-      if (isContr) { subCost += c.contrCost||0; subANS += (c.contrCost||0)*ANS_CON; }
-      else          { eeCost  += c.eeCost||0;    eeANS  += (c.eeCost||0)*ANS_LAB; }
-      matCost += c.matCost||0;
-      matANS  += (c.matCost||0)*ANS_MAT;
+
+      if (isContr) {
+        // Sub-Contract: contractor cost + plant on contractor items
+        const sc = (c.contrCost||0) + (c.plantFact||0);
+        subCost += sc;
+        subANS  += (c.contrCost||0)*ANS_CON;  // ANS only on labour portion
+      } else {
+        // EE Internal Works: EE labour + plant on EE items
+        const ee = (c.eeLabCost||0) + (c.plantFact||0);
+        eeCost += ee;
+        eeANS  += (c.eeLabCost||0)*ANS_LAB;   // ANS only on labour portion
+      }
+
+      // Materials: equipment/PCE cost on all items
+      matCost += c.equipCost||0;
+      matANS  += (c.equipCost||0)*ANS_MAT;
     });
-    const contPct  = parseFloat(inv.contingency||"0")/100;
-    const base     = subCost + matCost + eeCost;
-    const cont     = base * contPct;
+
+    const contPct   = parseFloat(inv.contingency||"0")/100;
+
+    // Cost* column = base cost (no ANS, no contingency)
+    const base      = subCost + matCost + eeCost;
+
+    // Contingency applied to base
+    const cont      = base * contPct;
+
+    // Total Estimated Cost (Cost* column) = base + contingency
     const totalCost = base + cont;
+
+    // Admin / ANS Burden = sum of all ANS margins
     const totalANS  = subANS + matANS + eeANS;
+
+    // Contract Value = Cost* + ANS (what the customer pays)
     const cv        = totalCost + totalANS;
-    const gst       = cv * 0.1;
-    return { subCost, matCost, eeCost, subANS, matANS, eeANS, cont,
-             totalCost, totalANS, cv, gst, gstInc: cv+gst,
-             eeOH: cv * 1.866 };
+
+    // EE Internal ERP (Direct spend) = same as Cost* — no ANS applied
+    // EE Internal ERP incl overheads = Cost* × overhead factor (~1.866)
+    // overhead factor from Financial Report sheet = "*** Includes ** + corporate & network burden"
+    const OVERHEAD = 1.866;
+    const eeOH     = totalCost * OVERHEAD;
+
+    const gst     = cv * 0.1;
+    const gstInc  = cv + gst;
+
+    // PA breakdown — derived from actual cost buckets
+    const paDesign       = eeCost * 0.12;                   // ~12% of EE Internal = design labour
+    const paConstruction = eeCost * 0.63;                   // ~63% of EE Internal = construction labour
+    const paCommission   = eeCost * 0.25;                   // ~25% of EE Internal = commissioning labour
+    const paMatContr     = matCost + subCost + matANS + subANS; // all materials + contractor + their ANS
+
+    return {
+      subCost, matCost, eeCost, subANS, matANS, eeANS, cont,
+      totalCost, totalANS, cv, gst, gstInc, eeOH,
+      paDesign, paConstruction, paCommission, paMatContr,
+    };
   }, [supply, lines, isCommercial, inv]);
 
   // Cash flow — cumulative S-curve over project months
@@ -1891,10 +1937,10 @@ function FinancialScreen({ inv, lines, isCommercial }) {
             <tbody>
               {[
                 ["Project Management, Approvals and Administration", 0],
-                ["Design",                totals.eeCost*0.12],
-                ["Materials and contracts", totals.matCost+totals.subCost+totals.matANS+totals.subANS],
-                ["Construction",          totals.eeCost*0.63],
-                ["Commissioning",         totals.eeCost*0.25],
+                ["Design",                totals.paDesign],
+                ["Materials and contracts", totals.paMatContr],
+                ["Construction",          totals.paConstruction],
+                ["Commissioning",         totals.paCommission],
                 ["GST",                   totals.gst],
               ].map(([lbl,val],i)=>(
                 <tr key={i} className={i%2===0?"bg-white":"bg-gray-50"}>
