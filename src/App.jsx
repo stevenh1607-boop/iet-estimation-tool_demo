@@ -382,21 +382,25 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
       ws[addr].z = "mmm-yy";
     }
   }
-  // Belt-and-braces: re-stamp every account code cell (col I = index 8) as text after aoa_to_sheet
-  for (let r = 2; r <= rows.length; r++) {
+  // Stamp @ format on every cell in col I (Account Code) — including header and empty cells.
+  // The working VBA export applies @ to the whole column; Copperleaf validates this.
+  for (let r = 1; r <= rows.length; r++) {
     const addr = "I" + r;
-    if (ws[addr] && ws[addr].v !== undefined && ws[addr].v !== "") {
+    if (!ws[addr]) {
+      // Create empty cell with @ format so column-level format is present
+      ws[addr] = { t:"s", v:"", z:"@" };
+    } else {
       ws[addr].t = "s";
-      ws[addr].v = String(ws[addr].v);
+      ws[addr].v = ws[addr].v != null ? String(ws[addr].v) : "";
       ws[addr].z = "@";
       delete ws[addr].w;
     }
   }
 
-  // Set column widths to match template
+  // Set column widths — col I (index 8) gets numFmt @ to match working file
   ws["!cols"] = [
     {wch:80},{wch:20},{wch:12},{wch:10},{wch:12},
-    {wch:60},{wch:18},{wch:14},{wch:14},{wch:20},{wch:14},
+    {wch:60},{wch:18},{wch:14},{wch:14,numFmt:"@"},{wch:20},{wch:14},
     {wch:80},{wch:24},{wch:12},{wch:30},{wch:22},{wch:10},
     ...Array(totalMonths).fill({wch:12}),
   ];
