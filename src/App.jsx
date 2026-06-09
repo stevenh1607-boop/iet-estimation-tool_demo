@@ -3724,7 +3724,7 @@ function ContributionSplitTab({ saved, setSaved }) {
   // ── WBS tree for Methods 2 & 3 ──────────────────────────────
   // Build L1→L3 hierarchy from supply items of a given investment
   const buildWbsTree = (invId) => {
-    const inv = saved.find(s=>s.id===invId);
+    const inv = findById(invId);
     if (!inv) return [];
     const lines = inv.lines || {};
     const entered = supply.filter(s => parseFloat(lines[s.wbs_code]?.qty||"0") > 0);
@@ -3741,10 +3741,26 @@ function ContributionSplitTab({ saved, setSaved }) {
   };
 
   // ── Compute totals for a child investment in this programme ─
+  // ID comparison: saved records store id as number (Date.now()), select option gives string
+  const findById = (invId) => saved.find(s=>String(s.id)===String(invId));
+
   const getInvTotals = (invId) => {
-    const inv = saved.find(s=>s.id===invId);
-    if (!inv) return { ee:0, comm:0, name:"Unknown", type:"" };
-    return { ee: inv.totalEE||0, comm: inv.totalComm||0, name: inv.inv?.name||"Unnamed", number: inv.inv?.number||"", type: inv.inv?.type||"", estClass: inv.inv?.estClass||"" };
+    const s = findById(invId);
+    if (!s) return { ee:0, comm:0, name:"Unknown", type:"", number:"", estClass:"", status:"" };
+    return {
+      ee: s.totalEE||0,
+      comm: s.totalComm||0,
+      name: s.inv?.name||"Unnamed",
+      number: s.inv?.number||"",
+      type: s.inv?.type||"",
+      estClass: s.inv?.estClass||"",
+      status: s.status||"Draft",
+      revision: s.inv?.revision||"",
+      estimatedBy: s.inv?.estimatedBy||"",
+      reviewedBy: s.inv?.reviewedBy||"",
+      phaseBreakdown: s.phaseBreakdown||{},
+      savedAt: s.savedAt||"",
+    };
   };
 
   // ── Compute programme summary ────────────────────────────────
@@ -3785,7 +3801,7 @@ function ContributionSplitTab({ saved, setSaved }) {
       const tagging = p.lineTagging || {};
       let eeAmount = 0, custAmount = 0;
       (summary.children||[]).forEach(c => {
-        const inv = saved.find(s=>s.id===c.invId);
+        const inv = saved.find(s=>String(s.id)===String(c.invId));
         if (!inv) return;
         const lines = inv.lines || {};
         supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0).forEach(item => {
@@ -3844,12 +3860,13 @@ function ContributionSplitTab({ saved, setSaved }) {
   };
   const addChildInv = () => {
     if (!addInvId || !prog) return;
-    if (prog.children.find(c=>c.invId===addInvId)) { setShowAddInv(false); return; }
-    updateProg({ children: [...(prog.children||[]), { invId: addInvId, role: addInvRole }] });
+    const sId = String(addInvId);
+    if (prog.children.find(c=>String(c.invId)===sId)) { setShowAddInv(false); return; }
+    updateProg({ children: [...(prog.children||[]), { invId: sId, role: addInvRole }] });
     setShowAddInv(false); setAddInvId("");
   };
   const removeChild = (invId) => {
-    updateProg({ children: (prog.children||[]).filter(c=>c.invId!==invId) });
+    updateProg({ children: (prog.children||[]).filter(c=>String(c.invId)!==String(invId)) });
   };
 
   const summary = getProgSummary(prog);
@@ -3857,7 +3874,7 @@ function ContributionSplitTab({ saved, setSaved }) {
   const METHOD_LABELS = { percentage:"Percentage", capped:"Capped EE ($7M)", section:"WBS Section", item:"WBS Item" };
 
   // Investments not already in this programme
-  const availableInvs = saved.filter(s=>!(prog?.children||[]).find(c=>c.invId===s.id));
+  const availableInvs = saved.filter(s=>!(prog?.children||[]).find(c=>String(c.invId)===String(s.id)));
 
   // Build flat WBS section list from all children for section/item tagging
   const tagItems = useMemo(() => {
@@ -3866,7 +3883,7 @@ function ContributionSplitTab({ saved, setSaved }) {
     const method = prog.splitMethod;
     if (method !== "section" && method !== "item") return [];
     (prog.children||[]).forEach(c => {
-      const inv = saved.find(s=>s.id===c.invId);
+      const inv = saved.find(s=>String(s.id)===String(c.invId));
       if (!inv) return;
       const lines = inv.lines || {};
       const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
@@ -3899,6 +3916,252 @@ function ContributionSplitTab({ saved, setSaved }) {
     });
     return Object.entries(g).sort(([a],[b])=>a.localeCompare(b));
   },[tagItems]);
+
+
+  // ── REPORT GENERATOR ─────────────────────────────────────────
+  const generateReport = () => {
+    if (!prog || !summary.children.length) return;
+    const PHASE_NAMES = {"1":"Planning","2":"Design","3":"Construction","4":"Commissioning","5":"M&C"};
+    const fmtD = (n) => `$${Math.round(n||0).toLocaleString("en-AU")}`;
+    const fmtP = (n) => `${Math.round(n||0)}%`;
+    const pctOf = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+
+    const progTotal = summary.totalEE + summary.totalComm;
+    const methodLabel = {percentage:"Percentage Split",capped:"Capped EE Contribution",section:"WBS Section Attribution",item:"WBS Item Attribution"}[prog.splitMethod||"percentage"]||"Percentage Split";
+
+    // Build per-investment breakdown rows
+    const invRows = summary.children.map(c => {
+      const pb = c.phaseBreakdown || {};
+      const phaseRows = Object.entries(pb).sort().map(([ph,p])=>`
+        <tr>
+          <td style="padding:5px 10px;color:#374151">Phase ${ph} — ${PHASE_NAMES[ph]||ph}</td>
+          <td style="padding:5px 10px;text-align:right;color:#1e40af">${fmtD(p.eeInt)}</td>
+          <td style="padding:5px 10px;text-align:right;color:#c2410c">${fmtD(p.comm)}</td>
+          <td style="padding:5px 10px;text-align:right;color:#374151">${Math.round(p.installHrs||0).toLocaleString()} hrs</td>
+        </tr>`).join("");
+      const roleColor = c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#6b7280";
+      const typeLabel = c.type==="Commercially Funded"?"Commercial (ANS Rates)":"EE Internal Rates";
+      return `
+      <div class="inv-block">
+        <div class="inv-header">
+          <div>
+            <div class="inv-name">${c.name||"Unnamed"}</div>
+            <div class="inv-meta">${c.number} &nbsp;·&nbsp; ${typeLabel} &nbsp;·&nbsp; ${c.estClass} Rev ${c.revision||"1"}</div>
+            <div class="inv-meta">Estimator: ${c.estimatedBy||"—"} &nbsp;·&nbsp; Reviewer: ${c.reviewedBy||"—"} &nbsp;·&nbsp; Status: ${c.status||"Draft"}</div>
+          </div>
+          <div class="role-badge" style="background:${roleColor}20;color:${roleColor};border:1px solid ${roleColor}40">${c.role}</div>
+        </div>
+        <div class="totals-row">
+          <div class="total-box ee">
+            <div class="total-label">EE Internal Total</div>
+            <div class="total-val">${fmtD(c.ee)}</div>
+          </div>
+          <div class="total-box comm">
+            <div class="total-label">Commercial Total (ANS)</div>
+            <div class="total-val">${fmtD(c.comm)}</div>
+          </div>
+          <div class="total-box">
+            <div class="total-label">ANS Uplift</div>
+            <div class="total-val">${fmtD(c.comm-c.ee)}</div>
+          </div>
+          <div class="total-box">
+            <div class="total-label">EE% of Commercial</div>
+            <div class="total-val">${pctOf(c.ee,c.comm)}%</div>
+          </div>
+        </div>
+        ${Object.keys(pb).length>0?`
+        <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:11px">
+          <thead>
+            <tr style="background:#1e3a5f;color:#fff">
+              <th style="text-align:left;padding:5px 10px;font-weight:600">Phase</th>
+              <th style="text-align:right;padding:5px 10px;font-weight:600">EE Internal</th>
+              <th style="text-align:right;padding:5px 10px;font-weight:600">Commercial</th>
+              <th style="text-align:right;padding:5px 10px;font-weight:600">Install Hrs</th>
+            </tr>
+          </thead>
+          <tbody>${phaseRows}</tbody>
+        </table>`:"<p style='font-size:11px;color:#9ca3af;margin:8px 0'>No phase breakdown available — save investment from Summary tab to populate.</p>"}
+      </div>`;
+    }).join("");
+
+    // Funding attribution table
+    const eeFunded   = summary.children.filter(c=>c.role==="EE-funded");
+    const custFunded  = summary.children.filter(c=>c.role==="Customer-funded");
+    const sharedFunded = summary.children.filter(c=>c.role==="Shared");
+    const eeTotal    = eeFunded.reduce((a,c)=>a+c.ee+c.comm,0);
+    const custTotal  = custFunded.reduce((a,c)=>a+c.ee+c.comm,0);
+    const sharedTotal = sharedFunded.reduce((a,c)=>a+c.ee+c.comm,0);
+
+    const splitEE   = split.eeSplit;
+    const splitCust = split.custSplit;
+    const eeBarPct  = pctOf(splitEE, splitEE+splitCust);
+    const custBarPct= 100-eeBarPct;
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/>
+<title>Contribution Split Report — ${prog.name}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;font-size:11px;color:#1f2937;background:#fff;padding:24px}
+  h1{font-size:20px;color:#1e3a5f;margin:0 0 4px}
+  h2{font-size:13px;color:#1e3a5f;margin:16px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}
+  h3{font-size:11px;color:#6b7280;margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em}
+  .subtitle{color:#6b7280;font-size:11px;margin-bottom:20px}
+  .header{border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+  .meta-box{border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px}
+  .meta-label{font-size:9px;text-transform:uppercase;color:#9ca3af;letter-spacing:.05em;margin-bottom:2px}
+  .meta-value{font-weight:700;color:#1f2937;font-size:13px}
+  .totals-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
+  .total-box{border-radius:6px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb}
+  .total-box.ee{background:#EFF6FF;border-color:#BFDBFE}
+  .total-box.comm{background:#FFF7ED;border-color:#FED7AA}
+  .total-label{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+  .total-val{font-size:14px;font-weight:700;color:#1f2937}
+  .split-summary{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:16px}
+  .split-bar{height:16px;border-radius:8px;display:flex;overflow:hidden;background:#e5e7eb;margin:10px 0}
+  .split-bar-ee{background:#1e3a5f;height:100%}
+  .split-bar-cust{background:#ea580c;height:100%}
+  .split-bar-over{background:#ef4444;height:100%}
+  .split-legend{display:flex;gap:16px;font-size:10px}
+  .legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
+  .attr-table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px}
+  .attr-table th{background:#1e3a5f;color:#fff;padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .attr-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6}
+  .attr-table tr:nth-child(even) td{background:#f9fafb}
+  .attr-table tfoot td{font-weight:700;border-top:2px solid #1e3a5f}
+  .inv-block{border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px;overflow:hidden}
+  .inv-header{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+  .inv-name{font-size:13px;font-weight:700;color:#1e3a5f}
+  .inv-meta{font-size:10px;color:#6b7280;margin-top:2px}
+  .role-badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px}
+  .rit-warning{background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 12px;color:#991B1B;font-size:11px;margin:10px 0}
+  .footer{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:9px;display:flex;justify-content:space-between}
+  @media print{body{padding:10px}.inv-block{page-break-inside:avoid}}
+</style>
+</head><body>
+
+<div class="header">
+  <div>
+    <h1>${prog.name}</h1>
+    <div class="subtitle">${prog.number?prog.number+" &nbsp;·&nbsp; ":""}Contribution Split Report &nbsp;·&nbsp; Generated ${new Date().toLocaleDateString("en-AU",{dateStyle:"long"})} &nbsp;·&nbsp; Split method: ${methodLabel}</div>
+  </div>
+  <div style="text-align:right;font-size:9px;color:#9ca3af">
+    <div>Essential Energy — IET Estimation Tool</div>
+    <div>Reporting Tool — Not a Copperleaf export</div>
+  </div>
+</div>
+
+<h2>Programme Summary</h2>
+<div class="meta-grid">
+  <div class="meta-box">
+    <div class="meta-label">Investments</div>
+    <div class="meta-value">${summary.children.length}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Portfolio EE Internal</div>
+    <div class="meta-value" style="color:#1e3a5f">${fmtD(summary.totalEE)}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Portfolio Commercial</div>
+    <div class="meta-value" style="color:#ea580c">${fmtD(summary.totalComm)}</div>
+  </div>
+  <div class="meta-box">
+    <div class="meta-label">Combined Portfolio</div>
+    <div class="meta-value">${fmtD(summary.totalEE+summary.totalComm)}</div>
+  </div>
+</div>
+
+<h2>Funding Attribution (${methodLabel})</h2>
+<div class="split-summary">
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+    <span style="font-weight:700;color:#1e3a5f">EE Funded: ${fmtD(splitEE)} (${fmtP(eeBarPct)})</span>
+    <span style="font-weight:700;color:#ea580c">Customer Funded: ${fmtD(splitCust)} (${fmtP(custBarPct)})</span>
+  </div>
+  <div class="split-bar">
+    <div class="split-bar-ee" style="width:${eeBarPct}%"></div>
+    <div class="split-bar-cust" style="width:${custBarPct}%"></div>
+    ${split.overCap>0?`<div class="split-bar-over" style="width:${pctOf(split.overCap,splitEE+splitCust)}%"></div>`:""}
+  </div>
+  <div class="split-legend">
+    <span><span class="legend-dot" style="background:#1e3a5f"></span>EE funded: ${fmtD(splitEE)}</span>
+    <span><span class="legend-dot" style="background:#ea580c"></span>Customer funded: ${fmtD(splitCust)}</span>
+    ${split.overCap>0?`<span><span class="legend-dot" style="background:#ef4444"></span>Over cap: ${fmtD(split.overCap)}</span>`:""}
+  </div>
+  ${split.ritDRequired?`<div class="rit-warning" style="margin-top:10px">⚠️ EE contribution exceeds the $7M regulatory cap by ${fmtD(split.overCap)}. A RIT-D must be completed and approved before the EE contribution cap can be increased.</div>`:""}
+</div>
+
+<h2>Investment Attribution Summary</h2>
+<table class="attr-table">
+  <thead>
+    <tr>
+      <th>Investment</th>
+      <th>Number</th>
+      <th>Class</th>
+      <th>Funding Role</th>
+      <th>Rate Basis</th>
+      <th style="text-align:right">EE Internal</th>
+      <th style="text-align:right">Commercial</th>
+      <th style="text-align:right">EE%</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${summary.children.map(c=>`
+    <tr>
+      <td>${c.name}</td>
+      <td style="font-family:monospace">${c.number}</td>
+      <td>${c.estClass}</td>
+      <td style="color:${c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#374151"};font-weight:600">${c.role}</td>
+      <td>${c.type==="Commercially Funded"?"Commercial (ANS)":"EE Internal"}</td>
+      <td style="text-align:right;font-weight:600;color:#1e3a5f">${fmtD(c.ee)}</td>
+      <td style="text-align:right;font-weight:600;color:#ea580c">${fmtD(c.comm)}</td>
+      <td style="text-align:right">${pctOf(c.ee,c.comm)}%</td>
+    </tr>`).join("")}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="5">Programme Total</td>
+      <td style="text-align:right;color:#1e3a5f">${fmtD(summary.totalEE)}</td>
+      <td style="text-align:right;color:#ea580c">${fmtD(summary.totalComm)}</td>
+      <td style="text-align:right">${pctOf(summary.totalEE,summary.totalComm)}%</td>
+    </tr>
+  </tfoot>
+</table>
+
+${eeFunded.length>0||custFunded.length>0||sharedFunded.length>0?`
+<h2>Funding Role Breakdown</h2>
+<table class="attr-table">
+  <thead><tr>
+    <th>Funding Role</th>
+    <th>Count</th>
+    <th style="text-align:right">EE Internal</th>
+    <th style="text-align:right">Commercial</th>
+    <th style="text-align:right">% of Programme</th>
+  </tr></thead>
+  <tbody>
+    ${eeFunded.length>0?`<tr><td style="color:#1e3a5f;font-weight:600">EE-funded</td><td>${eeFunded.length}</td><td style="text-align:right">${fmtD(eeFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(eeFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(eeTotal,progTotal)}%</td></tr>`:""}
+    ${custFunded.length>0?`<tr><td style="color:#ea580c;font-weight:600">Customer-funded</td><td>${custFunded.length}</td><td style="text-align:right">${fmtD(custFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(custFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(custTotal,progTotal)}%</td></tr>`:""}
+    ${sharedFunded.length>0?`<tr><td style="color:#374151;font-weight:600">Shared</td><td>${sharedFunded.length}</td><td style="text-align:right">${fmtD(sharedFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(sharedFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(sharedTotal,progTotal)}%</td></tr>`:""}
+  </tbody>
+  <tfoot>
+    <tr><td colspan="2">Total</td><td style="text-align:right">${fmtD(summary.totalEE)}</td><td style="text-align:right">${fmtD(summary.totalComm)}</td><td style="text-align:right">100%</td></tr>
+  </tfoot>
+</table>`:""}
+
+<h2>Investment Detail</h2>
+${invRows}
+
+<div class="footer">
+  <span>IET Estimation Tool — Programme Contribution Split Report</span>
+  <span>Programme: ${prog.name} ${prog.number?`(${prog.number})`:""} &nbsp;·&nbsp; ${summary.children.length} investments &nbsp;·&nbsp; Generated ${new Date().toLocaleString("en-AU")}</span>
+</div>
+
+<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
+</body></html>`;
+
+    const w = window.open("","_blank","width=1000,height=800");
+    if (w) { w.document.write(html); w.document.close(); }
+  };
 
   const EE_BLUE   = "#1e3a5f";
   const CUST_ORG  = "#ea580c";
@@ -3955,7 +4218,13 @@ function ContributionSplitTab({ saved, setSaved }) {
                     <div className="text-lg font-bold text-gray-900">{prog.name}</div>
                     {prog.number && <div className="text-xs text-gray-400 font-mono">{prog.number} · Created {prog.createdAt}</div>}
                   </div>
-                  <button onClick={()=>deleteProg(prog.id)} className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded">Delete programme</button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={generateReport} disabled={!summary.children.length}
+                      className="text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 shadow">
+                      🖨️ Produce Report
+                    </button>
+                    <button onClick={()=>deleteProg(prog.id)} className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded">Delete</button>
+                  </div>
                 </div>
               </div>
 
@@ -4262,7 +4531,7 @@ function ContributionSplitTab({ saved, setSaved }) {
                 </div>
               </div>
               {addInvId && (()=>{
-                const inv = saved.find(s=>s.id===addInvId);
+                const inv = findById(addInvId);
                 if(!inv) return null;
                 return (
                   <div className="bg-gray-50 rounded-lg p-3 text-xs">
