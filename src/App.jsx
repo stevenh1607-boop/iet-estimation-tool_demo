@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, createContext, useContext, useRef } from "react";
+import { useState, useMemo, useEffect, useCallback, createContext, useContext, useRef, Component } from "react";
 
 // ═══════════════════════════════════════════════════════════════════
 // IET ESTIMATION TOOL — FULL SCALE DEMO
@@ -6898,7 +6898,7 @@ const EST_TABS = [
 // ── ERROR BOUNDARY ───────────────────────────────────────────────
 // Catches any unhandled render errors and shows a recovery screen
 // instead of a blank page.
-class ErrorBoundary extends React.Component {
+class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error:null, info:null }; }
   static getDerivedStateFromError(error) { return { error }; }
   componentDidCatch(error, info) { this.setState({ error, info }); }
