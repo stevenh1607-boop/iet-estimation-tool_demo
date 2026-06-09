@@ -1480,7 +1480,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           {isWAFHAItem(item) && <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">WAFHA — day-rated, no install hrs override</div>}
                           {!isWAFHAItem(item) && <input type="number" min="0" value={ln.instHrsOvrd||""} placeholder={String(item.install_hrs_per||0)}
                             onChange={e=>updLine(item.wbs_code,"instHrsOvrd",e.target.value)}
-                            className="w-full text-xs border border-purple-300 bg-purple-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"/>
+                            className="w-full text-xs border border-purple-300 bg-purple-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"/>}
                         </div>
                         <div>
                           <label className="text-xs text-gray-500 block mb-0.5">Contractor Rate ($/unit)</label>
