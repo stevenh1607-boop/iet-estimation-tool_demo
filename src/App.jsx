@@ -212,7 +212,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
     row[5] = spendName;
     row[6] = currType;
     row[7] = 0;
-    row[8] = { t:"s", v:getAcctCode(spendName) }; // text cell — Copperleaf requires '001000 apostrophe prefix
+    row[8] = { t:"s", v:getAcctCode(spendName), z:"@" }; // text+@ — Copperleaf requires '001000 apostrophe prefix
     row[9] = resCode;
     row[10] = labourType;
     // Optional LLT/material metadata cols 11-16
@@ -382,7 +382,16 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
       ws[addr].z = "mmm-yy";
     }
   }
-  // Account code cells are pre-tagged as text cell objects in writeSpend — no post-processing needed
+  // Belt-and-braces: re-stamp every account code cell (col I = index 8) as text after aoa_to_sheet
+  for (let r = 2; r <= rows.length; r++) {
+    const addr = "I" + r;
+    if (ws[addr] && ws[addr].v !== undefined && ws[addr].v !== "") {
+      ws[addr].t = "s";
+      ws[addr].v = String(ws[addr].v);
+      ws[addr].z = "@";
+      delete ws[addr].w;
+    }
+  }
 
   // Set column widths to match template
   ws["!cols"] = [
