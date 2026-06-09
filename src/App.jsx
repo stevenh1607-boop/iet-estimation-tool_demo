@@ -104,7 +104,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
   const XL = window.XLSX;
 
   const isComm = inv.type === "Commercially Funded";
-  const ACCT   = "001000"; // always 001000 per template
+  // Account code is per-resource: Internal=001001, External/Commercial=001000
 
   // ── Project timeline ─────────────────────────────────────────
   const planStart = parseInt(inv.planStart||1),  planDur  = parseInt(inv.planDur||4);
@@ -141,10 +141,15 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
     return months.reduce((s,m) => s + escalationIndex(m, ratesArr), 0) / months.length;
   };
 
-  // ── Resource helpers ─────────────────────────────────────────
-  const getResCode      = (n) => resourceCodes[n]?.resource_code || "GMAT";
-  const getCurrencyType = (n) => resourceCodes[n]?.currency_type || "Dollar";
-  const getLabourType   = (n) => resourceCodes[n]?.labour_type   || "";
+  // ── Resource helpers — resource_codes.json keyed by resource_name ──────────
+  // account codes: Internal=001001, External/Commercial=001000 (per workbook Spend_Template)
+  const rc          = (n) => resourceCodes[n] || {};
+  const getResCode      = (n) => rc(n).resource_code  || "GMAT";
+  const getCurrencyType = (n) => rc(n).currency_type  || "Dollar";
+  const getLabourType   = (n) => rc(n).labour_type    || "";
+  const getAcctCode     = (n) => isComm
+    ? (rc(n).account_code_external || "001000")
+    : (rc(n).account_code_internal || "001001");
   const getEquipSource  = (wbs) => (equipLookup?.[wbs])?.source || "PCE";
 
   // ── Rows accumulator ─────────────────────────────────────────
@@ -207,7 +212,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
     row[5] = spendName;
     row[6] = currType;
     row[7] = 0;
-    row[8] = ACCT;
+    row[8] = getAcctCode(spendName);
     row[9] = resCode;
     row[10] = labourType;
     // Optional LLT/material metadata cols 11-16
@@ -4944,99 +4949,261 @@ function WBSVirtualList({ rows, managerMode=false, editingWbs=null, editVals={},
 
 // ── RATES EDITOR ────────────────────────────────────────────────
 function RatesEditor({ rates, managerMode, onUnlock }) {
-  const [localRates, setLocalRates] = useState(null);
-  const [editingRow,  setEditingRow]  = useState(null);
+  // Source is resource_codes.json (keyed by name) — richer than old resource_rates.json
+  const { resourceCodes: ctxRC } = useData();
+  const [localRC,     setLocalRC]     = useState(null);
+  const [editingKey,  setEditingKey]  = useState(null);
   const [editVals,    setEditVals]    = useState({});
-  const display = localRates || rates;
+  const [searchQ,     setSearchQ]     = useState("");
+  const [filterUnit,  setFilterUnit]  = useState("All");
+
+  // Merge ctx + any local overrides, convert to sorted array
+  const baseRC = localRC || ctxRC || {};
+  const rcArray = useMemo(()=>{
+    const arr = Object.values(baseRC);
+    return arr.sort((a,b)=>(a.resource_name||"").localeCompare(b.resource_name||""));
+  }, [baseRC]);
+
+  const filtered = useMemo(()=>{
+    const q = searchQ.toLowerCase();
+    return rcArray.filter(r => {
+      const matchQ = !q || (r.resource_name||"").toLowerCase().includes(q)
+        || (r.resource_code||"").toLowerCase().includes(q)
+        || (r.wacs_craft||"").toLowerCase().includes(q)
+        || (r.aer_code||"").toLowerCase().includes(q);
+      const matchU = filterUnit === "All" || (r.currency_type||"Hour") === filterUnit;
+      return matchQ && matchU;
+    });
+  }, [rcArray, searchQ, filterUnit]);
+
+  const EDITABLE_FIELDS = [
+    {key:"ee_internal_rate",    label:"EE Internal",    type:"number", cls:"text-right w-20 border-green-300 bg-green-50"},
+    {key:"ee_commercial_rate",  label:"EE Commercial",  type:"number", cls:"text-right w-20 border-orange-300 bg-orange-50"},
+    {key:"contractor_rate",     label:"Contr. Rate",    type:"number", cls:"text-right w-20 border-teal-300 bg-teal-50"},
+    {key:"ans_margin_pct",      label:"ANS %",          type:"number", cls:"text-right w-14 border-purple-300"},
+    {key:"aer_code",            label:"AER Code",       type:"text",   cls:"w-16 border-blue-300 font-mono"},
+    {key:"erp_code",            label:"ERP Code",       type:"text",   cls:"w-16 border-blue-200"},
+    {key:"wacs_craft",          label:"WACS Craft",     type:"text",   cls:"w-24 border-indigo-300 font-mono"},
+    {key:"resource_code",       label:"CL Code",        type:"text",   cls:"w-24 border-teal-300 font-mono"},
+    {key:"currency_type",       label:"Unit",           type:"text",   cls:"w-14 border-gray-300"},
+    {key:"labour_type",         label:"Labour Type",    type:"text",   cls:"w-20 border-gray-300"},
+    {key:"account_code_internal",label:"Acct Internal", type:"text",   cls:"w-20 border-gray-300 font-mono"},
+    {key:"account_code_external",label:"Acct External", type:"text",   cls:"w-20 border-gray-300 font-mono"},
+  ];
 
   const startEdit = (r) => {
-    setEditingRow(r.resource_type);
-    setEditVals({
-      ee_internal_rate:    r.ee_internal_rate,
-      ee_commercial_rate:  r.ee_commercial_rate,
-      ans_margin_pct_labour: r.ans_margin_pct_labour,
-      aer_code:            r.aer_code || "",
-      erp_code:            r.erp_code || "",
-      uom:                 r.uom || "Hour",
-    });
-  };
-  const saveEdit = (resource_type) => {
-    const base = localRates || rates;
-    setLocalRates(base.map(r => r.resource_type === resource_type ? {
-      ...r,
-      ee_internal_rate:    parseFloat(editVals.ee_internal_rate)    || r.ee_internal_rate,
-      ee_commercial_rate:  parseFloat(editVals.ee_commercial_rate)  || r.ee_commercial_rate,
-      ans_margin_pct_labour: parseFloat(editVals.ans_margin_pct_labour) || r.ans_margin_pct_labour,
-      aer_code: editVals.aer_code,
-      erp_code: editVals.erp_code,
-      uom:      editVals.uom,
-    } : r));
-    setEditingRow(null);
+    setEditingKey(r.resource_name);
+    const vals = {};
+    EDITABLE_FIELDS.forEach(f => { vals[f.key] = r[f.key] ?? ""; });
+    setEditVals(vals);
   };
 
-  const cols = ["Resource Type","AER Code","ERP Code","EE Internal $/hr","EE Commercial $/hr","ANS Margin %","UOM",""];
+  const saveEdit = (name) => {
+    const updated = { ...baseRC };
+    if (!updated[name]) return;
+    const r = { ...updated[name] };
+    EDITABLE_FIELDS.forEach(f => {
+      if (f.type === "number") {
+        const v = parseFloat(editVals[f.key]);
+        if (!isNaN(v)) r[f.key] = v;
+      } else {
+        r[f.key] = editVals[f.key] ?? "";
+      }
+    });
+    updated[name] = r;
+    setLocalRC(updated);
+    setEditingKey(null);
+  };
+
+  const dollarOrDash = v => v != null ? "$" + Number(v).toFixed(2) : "—";
+  const pctOrDash = v => v != null ? (Number(v)*100).toFixed(2)+"%" : "—";
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
-        <span className="text-xs text-gray-500">{display.length} resource types</span>
+      {/* Toolbar */}
+      <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
+        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
+          placeholder="Search name, CL code, WACS, AER…"
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+        {searchQ && <button onClick={()=>setSearchQ("")} className="text-gray-400 text-xs hover:text-gray-600">✕</button>}
+        <select value={filterUnit} onChange={e=>setFilterUnit(e.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none">
+          <option>All</option>
+          <option>Hour</option>
+          <option>Dollar</option>
+          <option>Day</option>
+        </select>
+        <span className="text-xs text-gray-400">{filtered.length} of {rcArray.length}</span>
         <div className="flex-1"/>
         {managerMode ? (
-          <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5">🔓 Manager Mode — click row to edit</span>
+          <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 px-3 py-1.5 rounded font-semibold">🔓 Manager Mode — click row to edit</span>
         ) : (
           <button onClick={onUnlock} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded flex items-center gap-1.5">🔒 Manager Mode</button>
         )}
       </div>
-      <div className="flex-1 overflow-y-auto">
-        <table className="w-full text-xs">
+
+      {/* Table */}
+      <div className="flex-1 overflow-auto">
+        <table className="text-xs w-full min-w-max">
           <thead className="bg-gray-50 border-b sticky top-0 z-10">
-            <tr>{cols.map(h=><th key={h} className="text-left px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">{h}</th>)}</tr>
+            <tr>
+              <th className="text-left px-3 py-2 font-semibold text-gray-600 whitespace-nowrap min-w-[180px]">Resource Name</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">Unit</th>
+              <th className="text-right px-2 py-2 font-semibold text-green-700 whitespace-nowrap">EE Internal</th>
+              <th className="text-right px-2 py-2 font-semibold text-orange-700 whitespace-nowrap">EE Commercial</th>
+              <th className="text-right px-2 py-2 font-semibold text-teal-700 whitespace-nowrap">Contr. Rate</th>
+              <th className="text-right px-2 py-2 font-semibold text-purple-700 whitespace-nowrap">ANS %</th>
+              <th className="text-center px-2 py-2 font-semibold text-blue-700 whitespace-nowrap">AER Code</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">ERP Code</th>
+              <th className="text-center px-2 py-2 font-semibold text-indigo-700 whitespace-nowrap">WACS Craft</th>
+              <th className="text-center px-2 py-2 font-semibold text-teal-800 whitespace-nowrap">CL Code</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">Labour Type</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">Acct Internal</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">Acct External</th>
+              <th className="text-center px-2 py-2 font-semibold text-gray-400 whitespace-nowrap"></th>
+            </tr>
           </thead>
           <tbody>
-            {display.map(r => {
-              const isEd = editingRow === r.resource_type;
+            {filtered.map(r => {
+              const isEd = editingKey === r.resource_name;
+              const isDollar = (r.currency_type||"Hour") === "Dollar";
+              const isDay    = (r.currency_type||"Hour") === "Day";
+              const rowBg = isEd ? "bg-blue-50" : isDollar ? "bg-amber-50/40" : isDay ? "bg-orange-50/40" : "hover:bg-gray-50";
+              const ef = v => isEd
+                ? <input type="number" step="0.01" value={editVals[v]||""} onChange={e=>setEditVals(p=>({...p,[v]:e.target.value}))}
+                    className="w-20 border border-green-300 bg-green-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
+                : null;
+              const et = v => isEd
+                ? <input type="text" value={editVals[v]||""} onChange={e=>setEditVals(p=>({...p,[v]:e.target.value}))}
+                    className="w-24 border border-gray-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                : null;
               return (
-                <tr key={r.resource_type} className={`border-b ${isEd?"bg-blue-50":"hover:bg-gray-50"}`}>
-                  <td className="px-3 py-1.5 font-medium text-gray-800 max-w-xs">
-                    <div className="truncate">{r.resource_type}</div>
+                <tr key={r.resource_name} className={`border-b transition-colors ${rowBg}`}>
+                  <td className="px-3 py-1.5 font-medium text-gray-800">
+                    <div className="whitespace-nowrap">{r.resource_name}</div>
                   </td>
-                  <td className="px-3 py-1.5">
-                    {isEd ? <input value={editVals.aer_code} onChange={e=>setEditVals(p=>({...p,aer_code:e.target.value}))}
-                      className="w-20 border border-blue-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/> : <span className="font-mono text-blue-700">{r.aer_code}</span>}
+                  {/* Unit */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <select value={editVals.currency_type||"Hour"} onChange={e=>setEditVals(p=>({...p,currency_type:e.target.value}))}
+                          className="border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none">
+                          <option>Hour</option><option>Dollar</option><option>Day</option>
+                        </select>
+                      : <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isDollar?"bg-amber-100 text-amber-800":isDay?"bg-orange-100 text-orange-800":"bg-blue-100 text-blue-800"}`}>{r.currency_type||"Hour"}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5">
-                    {isEd ? <input value={editVals.erp_code} onChange={e=>setEditVals(p=>({...p,erp_code:e.target.value}))}
-                      className="w-24 border border-blue-300 rounded px-1 py-0.5 text-xs focus:outline-none"/> : <span className="text-gray-500">{r.erp_code}</span>}
+                  {/* EE Internal */}
+                  <td className="px-2 py-1.5 text-right">
+                    {isEd
+                      ? <input type="number" step="0.01" value={editVals.ee_internal_rate||""} onChange={e=>setEditVals(p=>({...p,ee_internal_rate:e.target.value}))}
+                          className="w-20 border border-green-300 bg-green-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
+                      : <span className="font-medium text-green-800">{dollarOrDash(r.ee_internal_rate)}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5 text-right">
-                    {isEd ? <input type="number" value={editVals.ee_internal_rate} onChange={e=>setEditVals(p=>({...p,ee_internal_rate:e.target.value}))}
-                      className="w-20 border border-green-300 bg-green-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/> : <span className="font-medium text-blue-900">${r.ee_internal_rate?.toFixed(2)}</span>}
+                  {/* EE Commercial */}
+                  <td className="px-2 py-1.5 text-right">
+                    {isEd
+                      ? <input type="number" step="0.01" value={editVals.ee_commercial_rate||""} onChange={e=>setEditVals(p=>({...p,ee_commercial_rate:e.target.value}))}
+                          className="w-20 border border-orange-300 bg-orange-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
+                      : <span className="font-medium text-orange-700">{dollarOrDash(r.ee_commercial_rate)}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5 text-right">
-                    {isEd ? <input type="number" value={editVals.ee_commercial_rate} onChange={e=>setEditVals(p=>({...p,ee_commercial_rate:e.target.value}))}
-                      className="w-20 border border-orange-300 bg-orange-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/> : <span className="font-medium text-orange-700">${r.ee_commercial_rate?.toFixed(2)}</span>}
+                  {/* Contractor Rate */}
+                  <td className="px-2 py-1.5 text-right">
+                    {isEd
+                      ? <input type="number" step="0.01" value={editVals.contractor_rate||""} onChange={e=>setEditVals(p=>({...p,contractor_rate:e.target.value}))}
+                          className="w-20 border border-teal-300 bg-teal-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
+                      : <span className="text-teal-700">{r.contractor_rate!=null?"$"+Number(r.contractor_rate).toFixed(2):"—"}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5 text-right">
-                    {isEd ? <input type="number" step="0.001" value={(editVals.ans_margin_pct_labour*100).toFixed(1)} onChange={e=>setEditVals(p=>({...p,ans_margin_pct_labour:parseFloat(e.target.value)/100}))}
-                      className="w-16 border border-teal-300 bg-teal-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/> : <span className="text-teal-700">{r.ans_margin_pct_labour!=null?(r.ans_margin_pct_labour*100).toFixed(1)+"%":"—"}</span>}
+                  {/* ANS % */}
+                  <td className="px-2 py-1.5 text-right">
+                    {isEd
+                      ? <input type="number" step="0.01" value={editVals.ans_margin_pct!=null?(editVals.ans_margin_pct*100).toFixed(2):""} onChange={e=>setEditVals(p=>({...p,ans_margin_pct:parseFloat(e.target.value)/100||0}))}
+                          className="w-16 border border-purple-300 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
+                      : <span className="text-purple-700">{r.ans_margin_pct!=null?(Number(r.ans_margin_pct)*100).toFixed(2)+"%":"—"}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5">
-                    {isEd ? <input value={editVals.uom} onChange={e=>setEditVals(p=>({...p,uom:e.target.value}))}
-                      className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none"/> : <span className="text-gray-500">{r.uom}</span>}
+                  {/* AER Code */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.aer_code||""} onChange={e=>setEditVals(p=>({...p,aer_code:e.target.value}))}
+                          className="w-16 border border-blue-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-blue-700">{r.aer_code||"—"}</span>
+                    }
                   </td>
-                  <td className="px-3 py-1.5 text-center whitespace-nowrap">
-                    {managerMode && (isEd ? (
-                      <div className="flex gap-1">
-                        <button onClick={()=>saveEdit(r.resource_type)} className="text-green-600 hover:text-green-800 font-bold text-xs">✓</button>
-                        <button onClick={()=>setEditingRow(null)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
-                      </div>
-                    ) : <button onClick={()=>startEdit(r)} className="text-blue-400 hover:text-blue-700 text-xs">Edit</button>)}
+                  {/* ERP Code */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.erp_code||""} onChange={e=>setEditVals(p=>({...p,erp_code:e.target.value}))}
+                          className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-gray-500">{r.erp_code||"—"}</span>
+                    }
+                  </td>
+                  {/* WACS Craft */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.wacs_craft||""} onChange={e=>setEditVals(p=>({...p,wacs_craft:e.target.value}))}
+                          className="w-28 border border-indigo-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-indigo-700 text-[10px]">{r.wacs_craft||"—"}</span>
+                    }
+                  </td>
+                  {/* CL Resource Code */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.resource_code||""} onChange={e=>setEditVals(p=>({...p,resource_code:e.target.value}))}
+                          className="w-28 border border-teal-400 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-teal-800 font-semibold text-[10px] bg-teal-50 px-1 rounded">{r.resource_code||"—"}</span>
+                    }
+                  </td>
+                  {/* Labour Type */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.labour_type||""} onChange={e=>setEditVals(p=>({...p,labour_type:e.target.value}))}
+                          className="w-24 border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none"/>
+                      : <span className="text-gray-500">{r.labour_type||"—"}</span>
+                    }
+                  </td>
+                  {/* Account Code Internal */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.account_code_internal||""} onChange={e=>setEditVals(p=>({...p,account_code_internal:e.target.value}))}
+                          className="w-20 border border-gray-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-gray-600">{r.account_code_internal||"001001"}</span>
+                    }
+                  </td>
+                  {/* Account Code External */}
+                  <td className="px-2 py-1.5 text-center">
+                    {isEd
+                      ? <input type="text" value={editVals.account_code_external||""} onChange={e=>setEditVals(p=>({...p,account_code_external:e.target.value}))}
+                          className="w-20 border border-gray-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-gray-600">{r.account_code_external||"001000"}</span>
+                    }
+                  </td>
+                  {/* Actions */}
+                  <td className="px-2 py-1.5 text-center whitespace-nowrap">
+                    {managerMode && (isEd
+                      ? <div className="flex gap-1">
+                          <button onClick={()=>saveEdit(r.resource_name)} className="text-green-600 hover:text-green-800 font-bold text-xs bg-green-50 border border-green-300 rounded px-2 py-0.5">✓ Save</button>
+                          <button onClick={()=>setEditingKey(null)} className="text-gray-400 hover:text-gray-600 text-xs border border-gray-200 rounded px-1.5 py-0.5">✕</button>
+                        </div>
+                      : <button onClick={()=>startEdit(r)} className="text-blue-400 hover:text-blue-700 text-xs border border-blue-200 hover:border-blue-400 rounded px-2 py-0.5">Edit</button>
+                    )}
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Footer legend */}
+      <div className="flex-shrink-0 border-t bg-gray-50 px-3 py-1.5 flex items-center gap-4 text-[10px] text-gray-500">
+        <span className="flex items-center gap-1"><span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold">Hour</span> Labour resource</span>
+        <span className="flex items-center gap-1"><span className="bg-amber-100 text-amber-800 px-1 rounded font-semibold">Dollar</span> Contractor / Materials</span>
+        <span className="flex items-center gap-1"><span className="bg-orange-100 text-orange-800 px-1 rounded font-semibold">Day</span> WAFHA / Accommodation</span>
+        <span className="ml-2">CL Code = Copperleaf Resource Code · WACS = ERP craft code · Account: Internal=001001 · External/Commercial=001000</span>
+        {localRC && <span className="ml-auto text-orange-600 font-semibold">⚡ {Object.keys(localRC).length} local overrides (session only)</span>}
       </div>
     </div>
   );
