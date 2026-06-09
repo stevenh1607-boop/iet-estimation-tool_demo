@@ -3691,506 +3691,335 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
 // ── OLD SAVED INVESTMENTS (now replaced by hub) ──
 
 // ── CONTRIBUTION SPLIT TAB ───────────────────────────────────────
-// Reporting-only feature. Groups multiple saved investments (any type/rate)
-// under a parent programme node and shows a funding split breakdown.
-// Split methods: Percentage | WBS Section | WBS Item | Capped EE
-// EE Internal vs Commercial are SEPARATE rate streams — this is purely
-// a reporting/financial planning attribution tool, NOT tied to Copperleaf.
+// Reporting-only feature. Groups multiple saved investments under a
+// parent programme. Each child investment has its OWN independent
+// split method: Percentage | Capped | WBS Section | WBS Item.
+// Programme bar aggregates all child resolved splits.
 function ContributionSplitTab({ saved, setSaved }) {
-  const { supply, wbs: wbsMaster, commLookup } = useData();
-  const fmt = (n) => `$${Math.round(n||0).toLocaleString("en-AU")}`;
-  const pct = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+  const { supply } = useData();
+  const fmt  = (n) => `$${Math.round(n||0).toLocaleString("en-AU")}`;
+  const pct  = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+  const EE_BLUE  = "#1e3a5f";
+  const CUST_ORG = "#ea580c";
 
-  // ── Programmes stored in localStorage ───────────────────────
-  const [programmes, setProgrammes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("iet_programmes") || "[]"); } catch(e){ return []; }
-  });
-  const saveProgrammes = (p) => {
-    setProgrammes(p);
-    localStorage.setItem("iet_programmes", JSON.stringify(p));
-  };
-
-  const [selectedProg, setSelectedProg]   = useState(null);
-  const [showNewProg, setShowNewProg]     = useState(false);
-  const [newProgName, setNewProgName]     = useState("");
-  const [newProgNum,  setNewProgNum]      = useState("");
-  const [showAddInv,  setShowAddInv]      = useState(false);
-  const [addInvRole,  setAddInvRole]      = useState("EE-funded");
-  const [addInvId,    setAddInvId]        = useState("");
-
-  // Split method state per programme (stored with programme)
-  const prog = programmes.find(p=>p.id===selectedProg) || null;
-
-  // ── WBS tree for Methods 2 & 3 ──────────────────────────────
-  // Build L1→L3 hierarchy from supply items of a given investment
-  const buildWbsTree = (invId) => {
-    const inv = findById(invId);
-    if (!inv) return [];
-    const lines = inv.lines || {};
-    const entered = supply.filter(s => parseFloat(lines[s.wbs_code]?.qty||"0") > 0);
-    const l1Map = {};
-    entered.forEach(item => {
-      const parts = item.wbs_code.split(".");
-      const l1 = parts[0], l2 = parts.slice(0,2).join("."), l3 = parts.slice(0,3).join(".");
-      if (!l1Map[l1]) l1Map[l1] = { code:l1, label:`Phase ${l1}`, children:{}, expanded:true };
-      if (!l1Map[l1].children[l2]) l1Map[l1].children[l2] = { code:l2, label:`${l2} — Group`, children:{} };
-      if (!l1Map[l1].children[l2].children[l3]) l1Map[l1].children[l3] = { code:l3, label:`${l3}`, items:[] };
-      (l1Map[l1].children[l2].children[l3] || { items:[] }).items?.push(item);
-    });
-    return Object.values(l1Map);
-  };
-
-  // ── Compute totals for a child investment in this programme ─
-  // ID comparison: saved records store id as number (Date.now()), select option gives string
+  // ID comparison: saved ids are numbers, select values are strings
   const findById = (invId) => saved.find(s=>String(s.id)===String(invId));
 
-  const getInvTotals = (invId) => {
+  // ── Programmes ────────────────────────────────────────────────
+  const [programmes, setProgrammes] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem("iet_programmes")||"[]"); }catch(e){ return []; }
+  });
+  const saveProgrammes = (p)=>{ setProgrammes(p); localStorage.setItem("iet_programmes",JSON.stringify(p)); };
+
+  const [selectedProg, setSelectedProg] = useState(null);
+  const [expandedChild, setExpandedChild] = useState(null); // invId of expanded child
+  const [showNewProg, setShowNewProg]   = useState(false);
+  const [newProgName, setNewProgName]   = useState("");
+  const [newProgNum,  setNewProgNum]    = useState("");
+  const [showAddInv,  setShowAddInv]    = useState(false);
+  const [addInvRole,  setAddInvRole]    = useState("EE-funded");
+  const [addInvId,    setAddInvId]      = useState("");
+  const [expandedNodes, setExpandedNodes] = useState({});
+  const toggleNode = (code)=>setExpandedNodes(e=>({...e,[code]:!e[code]}));
+
+  const prog = programmes.find(p=>p.id===selectedProg)||null;
+
+  // ── Helpers ──────────────────────────────────────────────────
+  const getInvTotals = (invId)=>{
     const s = findById(invId);
-    if (!s) return { ee:0, comm:0, name:"Unknown", type:"", number:"", estClass:"", status:"" };
+    if(!s) return {ee:0,comm:0,name:"Unknown",type:"",number:"",estClass:"",status:"",revision:"",estimatedBy:"",reviewedBy:"",phaseBreakdown:{},savedAt:""};
     return {
-      ee: s.totalEE||0,
-      comm: s.totalComm||0,
-      name: s.inv?.name||"Unnamed",
-      number: s.inv?.number||"",
-      type: s.inv?.type||"",
-      estClass: s.inv?.estClass||"",
-      status: s.status||"Draft",
-      revision: s.inv?.revision||"",
-      estimatedBy: s.inv?.estimatedBy||"",
-      reviewedBy: s.inv?.reviewedBy||"",
-      phaseBreakdown: s.phaseBreakdown||{},
-      savedAt: s.savedAt||"",
+      ee:s.totalEE||0, comm:s.totalComm||0,
+      name:s.inv?.name||"Unnamed", number:s.inv?.number||"",
+      type:s.inv?.type||"", estClass:s.inv?.estClass||"",
+      status:s.status||"Draft", revision:s.inv?.revision||"",
+      estimatedBy:s.inv?.estimatedBy||"", reviewedBy:s.inv?.reviewedBy||"",
+      phaseBreakdown:s.phaseBreakdown||{}, savedAt:s.savedAt||"",
     };
   };
 
-  // ── Compute programme summary ────────────────────────────────
-  const getProgSummary = (p) => {
-    if (!p) return { totalEE:0, totalComm:0, children:[] };
-    const children = (p.children||[]).map(c => {
-      const t = getInvTotals(c.invId);
-      return {...c, ...t};
+  // Resolve a single child's split → { eeSplit, custSplit, eePct, custPct, overCap, ritD }
+  const resolveChildSplit = (child, totals)=>{
+    const method  = child.splitMethod||"percentage";
+    const base    = totals.comm>0 ? totals.comm : totals.ee;
+    if(base<=0) return {eeSplit:0,custSplit:0,eePct:0,custPct:0,overCap:0,ritD:false};
+    if(method==="percentage"){
+      const eeP = parseFloat(child.eePct??25)/100;
+      return {eeSplit:base*eeP,custSplit:base*(1-eeP),eePct:Math.round(eeP*100),custPct:Math.round((1-eeP)*100),overCap:0,ritD:false};
+    }
+    if(method==="capped"){
+      const cap=parseFloat(child.eeCap||7000000);
+      const eeSplit=Math.min(base,cap), custSplit=Math.max(0,base-cap);
+      return {eeSplit,custSplit,eePct:pct(eeSplit,base),custPct:pct(custSplit,base),overCap:custSplit,ritD:custSplit>0};
+    }
+    if(method==="section"||method==="item"){
+      // Sum tagged: lineTagging is per child, keyed by wbs_code (item) or l3 (section)
+      const tagging=child.lineTagging||{};
+      const rec=findById(child.invId);
+      if(!rec) return {eeSplit:0,custSplit:0,eePct:0,custPct:0,overCap:0,ritD:false};
+      const lines=rec.lines||{};
+      const entered=supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
+      let eeAmt=0, custAmt=0, untagAmt=0;
+      entered.forEach(item=>{
+        const key=method==="section"?item.wbs_code.split(".").slice(0,3).join("."):item.wbs_code;
+        const ln=lines[item.wbs_code]||{};
+        // Use simple proportion of total based on qty — approximation for demo
+        const tag=tagging[key];
+        const share=1/entered.length*base;
+        if(tag==="EE") eeAmt+=share;
+        else if(tag==="Customer") custAmt+=share;
+        else untagAmt+=share;
+      });
+      // Untagged defaults to Customer
+      custAmt+=untagAmt;
+      return {eeSplit:eeAmt,custSplit:custAmt,eePct:pct(eeAmt,base),custPct:pct(custAmt,base),overCap:0,ritD:false};
+    }
+    return {eeSplit:0,custSplit:0,eePct:0,custPct:0,overCap:0,ritD:false};
+  };
+
+  // Build full summary with per-child splits
+  const getProgSummary = (p)=>{
+    if(!p) return {totalEE:0,totalComm:0,totalEESplit:0,totalCustSplit:0,children:[]};
+    const children=(p.children||[]).map(c=>{
+      const t=getInvTotals(c.invId);
+      const childSplit=resolveChildSplit(c,t);
+      return {...c,...t,split:childSplit};
     });
     return {
-      totalEE:   children.reduce((a,c)=>a+c.ee,0),
-      totalComm: children.reduce((a,c)=>a+c.comm,0),
+      totalEE:children.reduce((a,c)=>a+c.ee,0),
+      totalComm:children.reduce((a,c)=>a+c.comm,0),
+      totalEESplit:children.reduce((a,c)=>a+c.split.eeSplit,0),
+      totalCustSplit:children.reduce((a,c)=>a+c.split.custSplit,0),
       children,
     };
   };
 
-  // ── Split calculation ─────────────────────────────────────────
-  const calcSplit = (p, summary) => {
-    if (!p || !summary.children.length) return { eeSplit:0, custSplit:0, eePct:0, custPct:0, overCap:0, ritDRequired:false };
-    const method = p.splitMethod || "percentage";
-    const total = summary.totalComm > 0 ? summary.totalComm : summary.totalEE;
-
-    if (method === "percentage") {
-      const eeP = parseFloat(p.eePct||25)/100;
-      const eeSplit   = total * eeP;
-      const custSplit = total * (1-eeP);
-      return { eeSplit, custSplit, eePct: Math.round(eeP*100), custPct: Math.round((1-eeP)*100), overCap:0, ritDRequired:false };
-    }
-    if (method === "capped") {
-      const cap       = parseFloat(p.eeCap||7000000);
-      const eeSplit   = Math.min(total, cap);
-      const custSplit = Math.max(0, total - cap);
-      const overCap   = custSplit;
-      return { eeSplit, custSplit, eePct: pct(eeSplit,total), custPct: pct(custSplit,total), overCap, ritDRequired: overCap > 0 };
-    }
-    if (method === "section" || method === "item") {
-      // Sum tagged amounts from prog.lineTagging: { wbs_code: "EE"|"Customer" }
-      const tagging = p.lineTagging || {};
-      let eeAmount = 0, custAmount = 0;
-      (summary.children||[]).forEach(c => {
-        const inv = saved.find(s=>String(s.id)===String(c.invId));
-        if (!inv) return;
-        const lines = inv.lines || {};
-        supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0).forEach(item => {
-          const tagKey = method==="section"
-            ? item.wbs_code.split(".").slice(0,3).join(".")
-            : item.wbs_code;
-          const tag = tagging[tagKey];
-          const cost = c.ee; // simplified: use EE internal cost for both — real system would calculate per-line
-          if (tag === "EE") eeAmount += (inv.phaseBreakdown?.[item.wbs_code.split(".")[0]]?.eeInt || 0);
-          else if (tag === "Customer") custAmount += (inv.phaseBreakdown?.[item.wbs_code.split(".")[0]]?.eeInt || 0);
-        });
-      });
-      // Fallback: if nothing tagged, use totals
-      if (eeAmount + custAmount === 0) { eeAmount = total * 0.5; custAmount = total * 0.5; }
-      return { eeSplit:eeAmount, custSplit:custAmount, eePct: pct(eeAmount,total), custPct: pct(custAmount,total), overCap:0, ritDRequired:false };
-    }
-    return { eeSplit:0, custSplit:0, eePct:0, custPct:0, overCap:0, ritDRequired:false };
-  };
-
-  // ── WBS Tree for section/item tagging ────────────────────────
-  const [expandedNodes, setExpandedNodes] = useState({});
-  const toggleNode = (code) => setExpandedNodes(e=>({...e,[code]:!e[code]}));
-
-  const updateProg = (updates) => {
-    const next = programmes.map(p=>p.id===selectedProg?{...p,...updates}:p);
-    saveProgrammes(next);
-  };
-  const updateTagging = (key, value) => {
-    const current = prog?.lineTagging || {};
-    const next = {...current, [key]: value};
-    updateProg({ lineTagging: next });
-  };
-
-  const createProg = () => {
-    if (!newProgName.trim()) return;
-    const newP = {
-      id: `prog_${Date.now()}`,
-      name: newProgName.trim(),
-      number: newProgNum.trim(),
-      createdAt: new Date().toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric"}),
-      children: [],
-      splitMethod: "percentage",
-      eePct: 25,
-      eeCap: 7000000,
-      lineTagging: {},
-    };
-    const next = [...programmes, newP];
-    saveProgrammes(next);
-    setSelectedProg(newP.id);
-    setShowNewProg(false);
-    setNewProgName(""); setNewProgNum("");
-  };
-  const deleteProg = (id) => {
-    saveProgrammes(programmes.filter(p=>p.id!==id));
-    if (selectedProg===id) setSelectedProg(null);
-  };
-  const addChildInv = () => {
-    if (!addInvId || !prog) return;
-    const sId = String(addInvId);
-    if (prog.children.find(c=>String(c.invId)===sId)) { setShowAddInv(false); return; }
-    updateProg({ children: [...(prog.children||[]), { invId: sId, role: addInvRole }] });
-    setShowAddInv(false); setAddInvId("");
-  };
-  const removeChild = (invId) => {
-    updateProg({ children: (prog.children||[]).filter(c=>String(c.invId)!==String(invId)) });
-  };
-
   const summary = getProgSummary(prog);
-  const split   = calcSplit(prog, summary);
-  const METHOD_LABELS = { percentage:"Percentage", capped:"Capped EE ($7M)", section:"WBS Section", item:"WBS Item" };
+  const progTotal = summary.totalEESplit+summary.totalCustSplit;
+  const anyRitD   = summary.children.some(c=>c.split?.ritD);
 
-  // Investments not already in this programme
-  const availableInvs = saved.filter(s=>!(prog?.children||[]).find(c=>String(c.invId)===String(s.id)));
+  // ── Programme CRUD ────────────────────────────────────────────
+  const updateProg = (updates)=>{
+    const next=programmes.map(p=>p.id===selectedProg?{...p,...updates}:p);
+    saveProgrammes(next);
+  };
+  // Update one child's attributes
+  const updateChild = (invId, updates)=>{
+    const children=(prog?.children||[]).map(c=>String(c.invId)===String(invId)?{...c,...updates}:c);
+    updateProg({children});
+  };
+  const updateChildTagging = (invId, key, value)=>{
+    const child=(prog?.children||[]).find(c=>String(c.invId)===String(invId));
+    if(!child) return;
+    const tagging={...child.lineTagging||{}};
+    if(value===undefined) delete tagging[key]; else tagging[key]=value;
+    updateChild(invId,{lineTagging:tagging});
+  };
 
-  // Build flat WBS section list from all children for section/item tagging
-  const tagItems = useMemo(() => {
-    if (!prog) return [];
-    const items = [];
-    const method = prog.splitMethod;
-    if (method !== "section" && method !== "item") return [];
-    (prog.children||[]).forEach(c => {
-      const inv = saved.find(s=>String(s.id)===String(c.invId));
-      if (!inv) return;
-      const lines = inv.lines || {};
-      const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
-      const seen = new Set();
-      entered.forEach(item => {
-        const key = method==="section" ? item.wbs_code.split(".").slice(0,3).join(".") : item.wbs_code;
-        if (seen.has(key)) return;
+  const createProg = ()=>{
+    if(!newProgName.trim()) return;
+    const np={id:`prog_${Date.now()}`,name:newProgName.trim(),number:newProgNum.trim(),
+      createdAt:new Date().toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric"}),
+      children:[]};
+    const next=[...programmes,np];
+    saveProgrammes(next); setSelectedProg(np.id);
+    setShowNewProg(false); setNewProgName(""); setNewProgNum("");
+  };
+  const deleteProg = (id)=>{ saveProgrammes(programmes.filter(p=>p.id!==id)); if(selectedProg===id) setSelectedProg(null); };
+  const addChildInv = ()=>{
+    if(!addInvId||!prog) return;
+    const sId=String(addInvId);
+    if((prog.children||[]).find(c=>String(c.invId)===sId)){setShowAddInv(false);return;}
+    updateProg({children:[...(prog.children||[]),{invId:sId,role:addInvRole,splitMethod:"percentage",eePct:25,eeCap:7000000,lineTagging:{}}]});
+    setShowAddInv(false); setAddInvId(""); setExpandedChild(sId);
+  };
+  const removeChild = (invId)=>{
+    updateProg({children:(prog.children||[]).filter(c=>String(c.invId)!==String(invId))});
+    if(expandedChild===String(invId)) setExpandedChild(null);
+  };
+
+  const availableInvs=saved.filter(s=>!(prog?.children||[]).find(c=>String(c.invId)===String(s.id)));
+
+  const METHOD_LABELS={percentage:"% Percentage",capped:"Capped ($7M)",section:"WBS Section",item:"WBS Item"};
+  const METHOD_DESCS ={percentage:"Flat EE/Customer percentage ratio",capped:"EE capped at dollar amount; over-cap → Customer",section:"Tag whole WBS L3 sections to a funder",item:"Tag individual estimate line items to a funder"};
+
+  // Build tag groups for a specific child
+  const buildTagGroups = (child)=>{
+    const rec=findById(child.invId);
+    if(!rec) return [];
+    const lines=rec.lines||{};
+    const method=child.splitMethod;
+    const entered=supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
+    const groupMap={};
+    const seen=new Set();
+    entered.forEach(item=>{
+      const key=method==="section"?item.wbs_code.split(".").slice(0,3).join("."):item.wbs_code;
+      const gk=item.wbs_code.split(".").slice(0,2).join(".");
+      if(!seen.has(key)){
         seen.add(key);
-        items.push({
-          key,
-          label: method==="section" ? key : item.description || key,
-          invName: inv.inv?.name || inv.inv?.number || "Unknown",
-          invId: c.invId,
-          l1: item.wbs_code.split(".")[0],
-          l2: item.wbs_code.split(".").slice(0,2).join("."),
-          isSection: method==="section",
-        });
-      });
+        if(!groupMap[gk]) groupMap[gk]={label:gk,items:[]};
+        groupMap[gk].items.push({key,label:item.description||key,l1:item.wbs_code.split(".")[0],l2:gk});
+      }
     });
-    return items.sort((a,b)=>a.key.localeCompare(b.key));
-  },[prog, saved, supply]);
+    return Object.entries(groupMap).sort(([a],[b])=>a.localeCompare(b));
+  };
 
-  // Group tagItems by L2 for section method
-  const tagGroups = useMemo(() => {
-    const g = {};
-    tagItems.forEach(t => {
-      const gk = t.l2 || t.l1;
-      if (!g[gk]) g[gk] = { label: gk, items:[] };
-      g[gk].items.push(t);
-    });
-    return Object.entries(g).sort(([a],[b])=>a.localeCompare(b));
-  },[tagItems]);
+  // ── Report generator ─────────────────────────────────────────
+  const generateReport = ()=>{
+    if(!prog||!summary.children.length) return;
+    const PHASE_NAMES={"1":"Planning","2":"Design","3":"Construction","4":"Commissioning","5":"M&C"};
+    const fmtD=(n)=>`$${Math.round(n||0).toLocaleString("en-AU")}`;
+    const fmtP=(n)=>`${Math.round(n||0)}%`;
+    const pctOf=(a,b)=>b>0?Math.round(a/b*100):0;
+    const methodLabel={percentage:"Percentage Split",capped:"Capped EE Contribution",section:"WBS Section Attribution",item:"WBS Item Attribution"};
 
-
-  // ── REPORT GENERATOR ─────────────────────────────────────────
-  const generateReport = () => {
-    if (!prog || !summary.children.length) return;
-    const PHASE_NAMES = {"1":"Planning","2":"Design","3":"Construction","4":"Commissioning","5":"M&C"};
-    const fmtD = (n) => `$${Math.round(n||0).toLocaleString("en-AU")}`;
-    const fmtP = (n) => `${Math.round(n||0)}%`;
-    const pctOf = (a,b) => b>0 ? Math.round(a/b*100) : 0;
-
-    const progTotal = summary.totalEE + summary.totalComm;
-    const methodLabel = {percentage:"Percentage Split",capped:"Capped EE Contribution",section:"WBS Section Attribution",item:"WBS Item Attribution"}[prog.splitMethod||"percentage"]||"Percentage Split";
-
-    // Build per-investment breakdown rows
-    const invRows = summary.children.map(c => {
-      const pb = c.phaseBreakdown || {};
-      const phaseRows = Object.entries(pb).sort().map(([ph,p])=>`
-        <tr>
-          <td style="padding:5px 10px;color:#374151">Phase ${ph} — ${PHASE_NAMES[ph]||ph}</td>
-          <td style="padding:5px 10px;text-align:right;color:#1e40af">${fmtD(p.eeInt)}</td>
-          <td style="padding:5px 10px;text-align:right;color:#c2410c">${fmtD(p.comm)}</td>
-          <td style="padding:5px 10px;text-align:right;color:#374151">${Math.round(p.installHrs||0).toLocaleString()} hrs</td>
-        </tr>`).join("");
-      const roleColor = c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#6b7280";
-      const typeLabel = c.type==="Commercially Funded"?"Commercial (ANS Rates)":"EE Internal Rates";
+    const invRows=summary.children.map(c=>{
+      const pb=c.phaseBreakdown||{};
+      const phaseRows=Object.entries(pb).sort().map(([ph,p])=>`
+        <tr><td style="padding:5px 10px;color:#374151">Phase ${ph} — ${PHASE_NAMES[ph]||ph}</td>
+        <td style="padding:5px 10px;text-align:right;color:#1e40af">${fmtD(p.eeInt)}</td>
+        <td style="padding:5px 10px;text-align:right;color:#c2410c">${fmtD(p.comm)}</td>
+        <td style="padding:5px 10px;text-align:right">${Math.round(p.installHrs||0).toLocaleString()} hrs</td></tr>`).join("");
+      const rc=c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#6b7280";
+      const ml=methodLabel[c.splitMethod||"percentage"]||"Percentage Split";
       return `
       <div class="inv-block">
         <div class="inv-header">
-          <div>
-            <div class="inv-name">${c.name||"Unnamed"}</div>
-            <div class="inv-meta">${c.number} &nbsp;·&nbsp; ${typeLabel} &nbsp;·&nbsp; ${c.estClass} Rev ${c.revision||"1"}</div>
-            <div class="inv-meta">Estimator: ${c.estimatedBy||"—"} &nbsp;·&nbsp; Reviewer: ${c.reviewedBy||"—"} &nbsp;·&nbsp; Status: ${c.status||"Draft"}</div>
+          <div><div class="inv-name">${c.name}</div>
+            <div class="inv-meta">${c.number} · ${c.type==="Commercially Funded"?"Commercial (ANS)":"EE Internal"} · ${c.estClass} Rev ${c.revision||"1"}</div>
+            <div class="inv-meta">Estimator: ${c.estimatedBy||"—"} · Reviewer: ${c.reviewedBy||"—"} · Status: ${c.status}</div>
+            <div class="inv-meta" style="margin-top:2px"><strong>Attribution method:</strong> ${ml}</div>
           </div>
-          <div class="role-badge" style="background:${roleColor}20;color:${roleColor};border:1px solid ${roleColor}40">${c.role}</div>
+          <div class="role-badge" style="background:${rc}20;color:${rc};border:1px solid ${rc}40">${c.role}</div>
         </div>
-        <div class="totals-row">
-          <div class="total-box ee">
-            <div class="total-label">EE Internal Total</div>
-            <div class="total-val">${fmtD(c.ee)}</div>
-          </div>
-          <div class="total-box comm">
-            <div class="total-label">Commercial Total (ANS)</div>
-            <div class="total-val">${fmtD(c.comm)}</div>
-          </div>
-          <div class="total-box">
-            <div class="total-label">ANS Uplift</div>
-            <div class="total-val">${fmtD(c.comm-c.ee)}</div>
-          </div>
-          <div class="total-box">
-            <div class="total-label">EE% of Commercial</div>
-            <div class="total-val">${pctOf(c.ee,c.comm)}%</div>
-          </div>
+        <div class="split-row">
+          <div class="sbox ee"><div class="slabel">EE Funded</div><div class="sval">${fmtD(c.split.eeSplit)}</div><div class="slabel">${fmtP(c.split.eePct)} of total</div></div>
+          <div class="sbox cu"><div class="slabel">Customer Funded</div><div class="sval">${fmtD(c.split.custSplit)}</div><div class="slabel">${fmtP(c.split.custPct)} of total</div></div>
+          <div class="sbox"><div class="slabel">EE Internal Total</div><div class="sval" style="color:#1e3a5f">${fmtD(c.ee)}</div></div>
+          <div class="sbox"><div class="slabel">Commercial Total</div><div class="sval" style="color:#ea580c">${fmtD(c.comm)}</div></div>
         </div>
-        ${Object.keys(pb).length>0?`
-        <table style="width:100%;border-collapse:collapse;margin-top:10px;font-size:11px">
-          <thead>
-            <tr style="background:#1e3a5f;color:#fff">
-              <th style="text-align:left;padding:5px 10px;font-weight:600">Phase</th>
-              <th style="text-align:right;padding:5px 10px;font-weight:600">EE Internal</th>
-              <th style="text-align:right;padding:5px 10px;font-weight:600">Commercial</th>
-              <th style="text-align:right;padding:5px 10px;font-weight:600">Install Hrs</th>
-            </tr>
-          </thead>
-          <tbody>${phaseRows}</tbody>
-        </table>`:"<p style='font-size:11px;color:#9ca3af;margin:8px 0'>No phase breakdown available — save investment from Summary tab to populate.</p>"}
+        <div class="bar-wrap"><div class="bar-fill" style="width:${c.split.eePct}%;background:#1e3a5f"></div><div class="bar-fill" style="width:${c.split.custPct}%;background:#ea580c"></div></div>
+        ${c.split.ritD?`<div class="rit">⚠️ EE contribution exceeds $7M cap by ${fmtD(c.split.overCap)}. RIT-D required.</div>`:""}
+        ${Object.keys(pb).length>0?`<table style="width:100%;border-collapse:collapse;margin:10px 0;font-size:11px">
+          <thead><tr style="background:#1e3a5f;color:#fff">
+            <th style="text-align:left;padding:5px 10px">Phase</th>
+            <th style="text-align:right;padding:5px 10px">EE Internal</th>
+            <th style="text-align:right;padding:5px 10px">Commercial</th>
+            <th style="text-align:right;padding:5px 10px">Install Hrs</th>
+          </tr></thead><tbody>${phaseRows}</tbody>
+        </table>`:`<p style="font-size:11px;color:#9ca3af;margin:8px 10px">No phase breakdown — save from Summary tab to populate.</p>`}
       </div>`;
     }).join("");
 
-    // Funding attribution table
-    const eeFunded   = summary.children.filter(c=>c.role==="EE-funded");
-    const custFunded  = summary.children.filter(c=>c.role==="Customer-funded");
-    const sharedFunded = summary.children.filter(c=>c.role==="Shared");
-    const eeTotal    = eeFunded.reduce((a,c)=>a+c.ee+c.comm,0);
-    const custTotal  = custFunded.reduce((a,c)=>a+c.ee+c.comm,0);
-    const sharedTotal = sharedFunded.reduce((a,c)=>a+c.ee+c.comm,0);
-
-    const splitEE   = split.eeSplit;
-    const splitCust = split.custSplit;
-    const eeBarPct  = pctOf(splitEE, splitEE+splitCust);
-    const custBarPct= 100-eeBarPct;
-
-    const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/>
+    const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"/>
 <title>Contribution Split Report — ${prog.name}</title>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:Arial,sans-serif;font-size:11px;color:#1f2937;background:#fff;padding:24px}
-  h1{font-size:20px;color:#1e3a5f;margin:0 0 4px}
-  h2{font-size:13px;color:#1e3a5f;margin:16px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}
-  h3{font-size:11px;color:#6b7280;margin:0 0 6px;text-transform:uppercase;letter-spacing:.04em}
-  .subtitle{color:#6b7280;font-size:11px;margin-bottom:20px}
-  .header{border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start}
-  .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-  .meta-box{border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px}
-  .meta-label{font-size:9px;text-transform:uppercase;color:#9ca3af;letter-spacing:.05em;margin-bottom:2px}
-  .meta-value{font-weight:700;color:#1f2937;font-size:13px}
-  .totals-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}
-  .total-box{border-radius:6px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb}
-  .total-box.ee{background:#EFF6FF;border-color:#BFDBFE}
-  .total-box.comm{background:#FFF7ED;border-color:#FED7AA}
-  .total-label{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
-  .total-val{font-size:14px;font-weight:700;color:#1f2937}
-  .split-summary{background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:16px}
-  .split-bar{height:16px;border-radius:8px;display:flex;overflow:hidden;background:#e5e7eb;margin:10px 0}
-  .split-bar-ee{background:#1e3a5f;height:100%}
-  .split-bar-cust{background:#ea580c;height:100%}
-  .split-bar-over{background:#ef4444;height:100%}
-  .split-legend{display:flex;gap:16px;font-size:10px}
-  .legend-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
-  .attr-table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px}
-  .attr-table th{background:#1e3a5f;color:#fff;padding:6px 10px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
-  .attr-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6}
-  .attr-table tr:nth-child(even) td{background:#f9fafb}
-  .attr-table tfoot td{font-weight:700;border-top:2px solid #1e3a5f}
-  .inv-block{border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px;overflow:hidden}
-  .inv-header{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
-  .inv-name{font-size:13px;font-weight:700;color:#1e3a5f}
-  .inv-meta{font-size:10px;color:#6b7280;margin-top:2px}
-  .role-badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px}
-  .rit-warning{background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:10px 12px;color:#991B1B;font-size:11px;margin:10px 0}
-  .footer{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:9px;display:flex;justify-content:space-between}
-  @media print{body{padding:10px}.inv-block{page-break-inside:avoid}}
-</style>
-</head><body>
-
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#1f2937;padding:24px}
+h1{font-size:20px;color:#1e3a5f}h2{font-size:13px;color:#1e3a5f;margin:16px 0 8px;border-bottom:1px solid #e5e7eb;padding-bottom:4px}
+.subtitle{color:#6b7280;font-size:11px;margin:4px 0 20px}
+.header{border-bottom:3px solid #1e3a5f;padding-bottom:12px;margin-bottom:20px;display:flex;justify-content:space-between}
+.meta-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+.meta-box{border:1px solid #e5e7eb;border-radius:6px;padding:8px 10px}
+.meta-label{font-size:9px;text-transform:uppercase;color:#9ca3af;letter-spacing:.05em;margin-bottom:2px}
+.meta-value{font-weight:700;font-size:13px}
+.prog-bar{height:20px;border-radius:8px;display:flex;overflow:hidden;background:#e5e7eb;margin:8px 0}
+.bar-wrap{height:10px;border-radius:6px;display:flex;overflow:hidden;background:#e5e7eb;margin:8px 10px}
+.bar-fill{height:100%}
+.split-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:10px}
+.sbox{border-radius:6px;padding:8px 10px;background:#f8fafc;border:1px solid #e5e7eb}
+.sbox.ee{background:#EFF6FF;border-color:#BFDBFE}.sbox.cu{background:#FFF7ED;border-color:#FED7AA}
+.slabel{font-size:9px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px}
+.sval{font-size:14px;font-weight:700}
+.attr-table{width:100%;border-collapse:collapse;margin-bottom:16px;font-size:11px}
+.attr-table th{background:#1e3a5f;color:#fff;padding:6px 10px;text-align:left;font-size:10px}
+.attr-table td{padding:6px 10px;border-bottom:1px solid #f3f4f6}
+.attr-table tr:nth-child(even) td{background:#f9fafb}
+.attr-table tfoot td{font-weight:700;border-top:2px solid #1e3a5f}
+.inv-block{border:1px solid #e5e7eb;border-radius:8px;margin-bottom:14px;overflow:hidden}
+.inv-header{display:flex;justify-content:space-between;align-items:flex-start;padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+.inv-name{font-size:13px;font-weight:700;color:#1e3a5f}.inv-meta{font-size:10px;color:#6b7280;margin-top:2px}
+.role-badge{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;white-space:nowrap}
+.rit{background:#FEF2F2;border:1px solid #FECACA;border-radius:6px;padding:8px 10px;color:#991B1B;font-size:11px;margin:8px 10px}
+.footer{margin-top:24px;padding-top:8px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:9px;display:flex;justify-content:space-between}
+@media print{body{padding:10px}.inv-block{page-break-inside:avoid}}
+</style></head><body>
 <div class="header">
-  <div>
-    <h1>${prog.name}</h1>
-    <div class="subtitle">${prog.number?prog.number+" &nbsp;·&nbsp; ":""}Contribution Split Report &nbsp;·&nbsp; Generated ${new Date().toLocaleDateString("en-AU",{dateStyle:"long"})} &nbsp;·&nbsp; Split method: ${methodLabel}</div>
-  </div>
-  <div style="text-align:right;font-size:9px;color:#9ca3af">
-    <div>Essential Energy — IET Estimation Tool</div>
-    <div>Reporting Tool — Not a Copperleaf export</div>
-  </div>
+  <div><h1>${prog.name}</h1><div class="subtitle">${prog.number?prog.number+" · ":""}Contribution Split Report · Generated ${new Date().toLocaleDateString("en-AU",{dateStyle:"long"})}</div></div>
+  <div style="text-align:right;font-size:9px;color:#9ca3af"><div>Essential Energy — IET Estimation Tool</div><div>Reporting only — not a Copperleaf export</div></div>
 </div>
-
 <h2>Programme Summary</h2>
 <div class="meta-grid">
-  <div class="meta-box">
-    <div class="meta-label">Investments</div>
-    <div class="meta-value">${summary.children.length}</div>
-  </div>
-  <div class="meta-box">
-    <div class="meta-label">Portfolio EE Internal</div>
-    <div class="meta-value" style="color:#1e3a5f">${fmtD(summary.totalEE)}</div>
-  </div>
-  <div class="meta-box">
-    <div class="meta-label">Portfolio Commercial</div>
-    <div class="meta-value" style="color:#ea580c">${fmtD(summary.totalComm)}</div>
-  </div>
-  <div class="meta-box">
-    <div class="meta-label">Combined Portfolio</div>
-    <div class="meta-value">${fmtD(summary.totalEE+summary.totalComm)}</div>
-  </div>
+  <div class="meta-box"><div class="meta-label">Investments</div><div class="meta-value">${summary.children.length}</div></div>
+  <div class="meta-box"><div class="meta-label">EE Funded (split)</div><div class="meta-value" style="color:#1e3a5f">${fmtD(summary.totalEESplit)}</div></div>
+  <div class="meta-box"><div class="meta-label">Customer Funded (split)</div><div class="meta-value" style="color:#ea580c">${fmtD(summary.totalCustSplit)}</div></div>
+  <div class="meta-box"><div class="meta-label">Portfolio Commercial</div><div class="meta-value">${fmtD(summary.totalComm)}</div></div>
 </div>
-
-<h2>Funding Attribution (${methodLabel})</h2>
-<div class="split-summary">
-  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-    <span style="font-weight:700;color:#1e3a5f">EE Funded: ${fmtD(splitEE)} (${fmtP(eeBarPct)})</span>
-    <span style="font-weight:700;color:#ea580c">Customer Funded: ${fmtD(splitCust)} (${fmtP(custBarPct)})</span>
-  </div>
-  <div class="split-bar">
-    <div class="split-bar-ee" style="width:${eeBarPct}%"></div>
-    <div class="split-bar-cust" style="width:${custBarPct}%"></div>
-    ${split.overCap>0?`<div class="split-bar-over" style="width:${pctOf(split.overCap,splitEE+splitCust)}%"></div>`:""}
-  </div>
-  <div class="split-legend">
-    <span><span class="legend-dot" style="background:#1e3a5f"></span>EE funded: ${fmtD(splitEE)}</span>
-    <span><span class="legend-dot" style="background:#ea580c"></span>Customer funded: ${fmtD(splitCust)}</span>
-    ${split.overCap>0?`<span><span class="legend-dot" style="background:#ef4444"></span>Over cap: ${fmtD(split.overCap)}</span>`:""}
-  </div>
-  ${split.ritDRequired?`<div class="rit-warning" style="margin-top:10px">⚠️ EE contribution exceeds the $7M regulatory cap by ${fmtD(split.overCap)}. A RIT-D must be completed and approved before the EE contribution cap can be increased.</div>`:""}
+<h2>Combined Funding Attribution</h2>
+<div style="display:flex;justify-content:space-between;margin-bottom:4px">
+  <span style="font-weight:700;color:#1e3a5f">EE: ${fmtD(summary.totalEESplit)} (${pctOf(summary.totalEESplit,progTotal)}%)</span>
+  <span style="font-weight:700;color:#ea580c">Customer: ${fmtD(summary.totalCustSplit)} (${pctOf(summary.totalCustSplit,progTotal)}%)</span>
 </div>
-
+<div class="prog-bar">
+  <div class="bar-fill" style="width:${pctOf(summary.totalEESplit,progTotal)}%;background:#1e3a5f"></div>
+  <div class="bar-fill" style="width:${pctOf(summary.totalCustSplit,progTotal)}%;background:#ea580c"></div>
+</div>
+${anyRitD?`<div class="rit">⚠️ One or more investments have EE contributions exceeding the $7M regulatory cap. See investment detail below.</div>`:""}
 <h2>Investment Attribution Summary</h2>
-<table class="attr-table">
-  <thead>
-    <tr>
-      <th>Investment</th>
-      <th>Number</th>
-      <th>Class</th>
-      <th>Funding Role</th>
-      <th>Rate Basis</th>
-      <th style="text-align:right">EE Internal</th>
-      <th style="text-align:right">Commercial</th>
-      <th style="text-align:right">EE%</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${summary.children.map(c=>`
-    <tr>
-      <td>${c.name}</td>
-      <td style="font-family:monospace">${c.number}</td>
-      <td>${c.estClass}</td>
-      <td style="color:${c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#374151"};font-weight:600">${c.role}</td>
-      <td>${c.type==="Commercially Funded"?"Commercial (ANS)":"EE Internal"}</td>
-      <td style="text-align:right;font-weight:600;color:#1e3a5f">${fmtD(c.ee)}</td>
-      <td style="text-align:right;font-weight:600;color:#ea580c">${fmtD(c.comm)}</td>
-      <td style="text-align:right">${pctOf(c.ee,c.comm)}%</td>
-    </tr>`).join("")}
-  </tbody>
-  <tfoot>
-    <tr>
-      <td colspan="5">Programme Total</td>
-      <td style="text-align:right;color:#1e3a5f">${fmtD(summary.totalEE)}</td>
-      <td style="text-align:right;color:#ea580c">${fmtD(summary.totalComm)}</td>
-      <td style="text-align:right">${pctOf(summary.totalEE,summary.totalComm)}%</td>
-    </tr>
-  </tfoot>
-</table>
-
-${eeFunded.length>0||custFunded.length>0||sharedFunded.length>0?`
-<h2>Funding Role Breakdown</h2>
-<table class="attr-table">
-  <thead><tr>
-    <th>Funding Role</th>
-    <th>Count</th>
-    <th style="text-align:right">EE Internal</th>
-    <th style="text-align:right">Commercial</th>
-    <th style="text-align:right">% of Programme</th>
-  </tr></thead>
-  <tbody>
-    ${eeFunded.length>0?`<tr><td style="color:#1e3a5f;font-weight:600">EE-funded</td><td>${eeFunded.length}</td><td style="text-align:right">${fmtD(eeFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(eeFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(eeTotal,progTotal)}%</td></tr>`:""}
-    ${custFunded.length>0?`<tr><td style="color:#ea580c;font-weight:600">Customer-funded</td><td>${custFunded.length}</td><td style="text-align:right">${fmtD(custFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(custFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(custTotal,progTotal)}%</td></tr>`:""}
-    ${sharedFunded.length>0?`<tr><td style="color:#374151;font-weight:600">Shared</td><td>${sharedFunded.length}</td><td style="text-align:right">${fmtD(sharedFunded.reduce((a,c)=>a+c.ee,0))}</td><td style="text-align:right">${fmtD(sharedFunded.reduce((a,c)=>a+c.comm,0))}</td><td style="text-align:right">${pctOf(sharedTotal,progTotal)}%</td></tr>`:""}
-  </tbody>
-  <tfoot>
-    <tr><td colspan="2">Total</td><td style="text-align:right">${fmtD(summary.totalEE)}</td><td style="text-align:right">${fmtD(summary.totalComm)}</td><td style="text-align:right">100%</td></tr>
-  </tfoot>
-</table>`:""}
-
-<h2>Investment Detail</h2>
+<table class="attr-table"><thead><tr>
+  <th>Investment</th><th>Number</th><th>Class</th><th>Role</th><th>Method</th>
+  <th style="text-align:right">EE Funded</th><th style="text-align:right">Customer Funded</th><th style="text-align:right">EE%</th>
+</tr></thead><tbody>
+${summary.children.map(c=>`<tr>
+  <td>${c.name}</td><td style="font-family:monospace">${c.number}</td><td>${c.estClass}</td>
+  <td style="color:${c.role==="EE-funded"?"#1e3a5f":c.role==="Customer-funded"?"#ea580c":"#374151"};font-weight:600">${c.role}</td>
+  <td>${methodLabel[c.splitMethod||"percentage"]}</td>
+  <td style="text-align:right;font-weight:600;color:#1e3a5f">${fmtD(c.split.eeSplit)}</td>
+  <td style="text-align:right;font-weight:600;color:#ea580c">${fmtD(c.split.custSplit)}</td>
+  <td style="text-align:right">${fmtP(c.split.eePct)}</td>
+</tr>`).join("")}
+</tbody><tfoot><tr>
+  <td colspan="5">Programme Total</td>
+  <td style="text-align:right;color:#1e3a5f">${fmtD(summary.totalEESplit)}</td>
+  <td style="text-align:right;color:#ea580c">${fmtD(summary.totalCustSplit)}</td>
+  <td style="text-align:right">${fmtP(pctOf(summary.totalEESplit,progTotal))}</td>
+</tr></tfoot></table>
+<h2>Investment Detail (per-investment attribution)</h2>
 ${invRows}
-
 <div class="footer">
   <span>IET Estimation Tool — Programme Contribution Split Report</span>
-  <span>Programme: ${prog.name} ${prog.number?`(${prog.number})`:""} &nbsp;·&nbsp; ${summary.children.length} investments &nbsp;·&nbsp; Generated ${new Date().toLocaleString("en-AU")}</span>
+  <span>${prog.name}${prog.number?` (${prog.number})`:""} · ${summary.children.length} investments · ${new Date().toLocaleString("en-AU")}</span>
 </div>
-
 <script>window.onload=()=>{window.print();window.onafterprint=()=>window.close();}</script>
 </body></html>`;
 
-    const w = window.open("","_blank","width=1000,height=800");
-    if (w) { w.document.write(html); w.document.close(); }
+    const w=window.open("","_blank","width=1000,height=800");
+    if(w){w.document.write(html);w.document.close();}
   };
-
-  const EE_BLUE   = "#1e3a5f";
-  const CUST_ORG  = "#ea580c";
 
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* ── Left: Programme list ── */}
-      <div className="w-64 flex-shrink-0 border-r bg-white flex flex-col overflow-hidden">
+      <div className="w-60 flex-shrink-0 border-r bg-white flex flex-col overflow-hidden">
         <div className="px-3 py-2.5 border-b flex items-center justify-between">
           <span className="text-xs font-bold text-gray-700">Programmes</span>
-          <button onClick={()=>setShowNewProg(true)}
-            className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">+ New</button>
+          <button onClick={()=>setShowNewProg(true)} className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">+ New</button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {programmes.length === 0 && (
-            <div className="text-xs text-gray-400 text-center px-4 py-8">No programmes yet. Create one to group investments and model funding splits.</div>
+          {programmes.length===0&&(
+            <div className="text-xs text-gray-400 text-center px-4 py-8">No programmes yet.<br/>Create one to group investments.</div>
           )}
-          {programmes.map(p => {
-            const s = getProgSummary(p);
-            const isSel = selectedProg===p.id;
+          {programmes.map(p=>{
+            const s=getProgSummary(p); const isSel=selectedProg===p.id;
             return (
-              <div key={p.id}
-                onClick={()=>setSelectedProg(isSel?null:p.id)}
+              <div key={p.id} onClick={()=>{setSelectedProg(isSel?null:p.id);setExpandedChild(null);}}
                 className={`px-3 py-2.5 border-b cursor-pointer transition-colors ${isSel?"bg-blue-50 border-l-4 border-l-blue-700":"hover:bg-gray-50"}`}>
                 <div className={`font-semibold text-xs truncate ${isSel?"text-blue-800":"text-gray-800"}`}>{p.name}</div>
-                {p.number && <div className="text-xs text-gray-400 font-mono">{p.number}</div>}
-                <div className="text-xs text-gray-500 mt-0.5">{s.children.length} investments</div>
-                <div className="text-xs font-semibold" style={{color:EE_BLUE}}>EE {fmt(s.totalEE)}</div>
-                <div className="text-xs font-semibold" style={{color:CUST_ORG}}>Comm {fmt(s.totalComm)}</div>
+                {p.number&&<div className="text-xs text-gray-400 font-mono">{p.number}</div>}
+                <div className="text-xs text-gray-400 mt-0.5">{s.children.length} investments</div>
+                <div className="flex gap-3 mt-1">
+                  <span className="text-xs font-semibold" style={{color:EE_BLUE}}>{fmt(s.totalEESplit)} EE</span>
+                  <span className="text-xs font-semibold" style={{color:CUST_ORG}}>{fmt(s.totalCustSplit)} Cust</span>
+                </div>
               </div>
             );
           })}
@@ -4204,19 +4033,19 @@ ${invRows}
             <div className="text-center">
               <div className="text-3xl mb-2">💰</div>
               <div className="text-sm font-semibold">Select or create a programme</div>
-              <div className="text-xs mt-1 max-w-xs">Group investments under a parent programme node and model how costs are attributed between EE and the customer.</div>
+              <div className="text-xs mt-1 max-w-xs">Group investments and set a funding attribution method per investment — each child can have its own split.</div>
             </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-4">
-            <div className="max-w-5xl mx-auto space-y-4">
+            <div className="max-w-5xl mx-auto space-y-3">
 
               {/* Programme header */}
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="text-lg font-bold text-gray-900">{prog.name}</div>
-                    {prog.number && <div className="text-xs text-gray-400 font-mono">{prog.number} · Created {prog.createdAt}</div>}
+                    {prog.number&&<div className="text-xs text-gray-400 font-mono">{prog.number} · Created {prog.createdAt}</div>}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={generateReport} disabled={!summary.children.length}
@@ -4228,247 +4057,225 @@ ${invRows}
                 </div>
               </div>
 
-              {/* Summary totals */}
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  {label:"Investments",value:summary.children.length,plain:true},
-                  {label:"Total EE Internal",value:fmt(summary.totalEE),color:EE_BLUE},
-                  {label:"Total Commercial",value:fmt(summary.totalComm),color:CUST_ORG},
-                  {label:"Combined",value:fmt(summary.totalEE+summary.totalComm),plain:true},
-                ].map((m,i)=>(
-                  <div key={i} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-                    <div className="text-xs text-gray-500">{m.label}</div>
-                    <div className="text-base font-bold mt-0.5" style={m.color?{color:m.color}:{}}>{m.value}</div>
-                  </div>
-                ))}
+              {/* Summary bar */}
+              {summary.children.length>0&&(
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                <div className="text-xs font-bold text-gray-700 mb-2">Combined Funding Attribution</div>
+                <div className="grid grid-cols-4 gap-3 mb-3">
+                  {[
+                    {label:"Investments",value:summary.children.length,plain:true},
+                    {label:"EE Funded (split)",value:fmt(summary.totalEESplit),color:EE_BLUE},
+                    {label:"Customer Funded (split)",value:fmt(summary.totalCustSplit),color:CUST_ORG},
+                    {label:"Portfolio Commercial",value:fmt(summary.totalComm),plain:true},
+                  ].map((m,i)=>(
+                    <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="text-xs text-gray-500">{m.label}</div>
+                      <div className="text-sm font-bold mt-0.5" style={m.color?{color:m.color}:{}}>{m.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-semibold" style={{color:EE_BLUE}}>EE: {fmt(summary.totalEESplit)} ({pct(summary.totalEESplit,progTotal)}%)</span>
+                  <span className="font-semibold" style={{color:CUST_ORG}}>Customer: {fmt(summary.totalCustSplit)} ({pct(summary.totalCustSplit,progTotal)}%)</span>
+                </div>
+                <div className="h-3 rounded-full flex overflow-hidden bg-gray-100">
+                  <div className="h-full transition-all" style={{width:`${pct(summary.totalEESplit,progTotal)}%`,background:EE_BLUE}}/>
+                  <div className="h-full transition-all" style={{width:`${pct(summary.totalCustSplit,progTotal)}%`,background:CUST_ORG}}/>
+                </div>
+                {anyRitD&&<div className="mt-2 text-xs bg-red-50 border border-red-200 rounded px-3 py-1.5 text-red-700">⚠️ One or more investments exceed the $7M EE cap. See investment detail below.</div>}
               </div>
+              )}
 
-              {/* Child investments */}
+              {/* Child investments — accordion with per-child split */}
               <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
-                  <span className="text-xs font-bold text-gray-700">Child Investments</span>
+                  <span className="text-xs font-bold text-gray-700">Child Investments — click to set attribution</span>
                   <button onClick={()=>setShowAddInv(true)}
                     className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded font-semibold">+ Add investment</button>
                 </div>
-                {summary.children.length === 0 ? (
-                  <div className="text-xs text-gray-400 text-center py-8">No investments added yet. Click "Add investment" to link saved estimates to this programme.</div>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-semibold text-gray-600">Investment</th>
-                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Role</th>
-                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Class</th>
-                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Type</th>
-                        <th className="text-right px-3 py-2 font-semibold text-gray-600">EE Internal</th>
-                        <th className="text-right px-3 py-2 font-semibold text-gray-600">Commercial</th>
-                        <th className="px-3 py-2 w-12"/>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {summary.children.map((c,i)=>{
-                        const roleColor = c.role==="EE-funded"
-                          ? "bg-blue-100 text-blue-700"
-                          : c.role==="Customer-funded"
-                          ? "bg-orange-100 text-orange-700"
-                          : "bg-gray-100 text-gray-600";
-                        const typeColor = c.type==="Commercially Funded"?"bg-orange-50 text-orange-700":"bg-blue-50 text-blue-700";
-                        return (
-                          <tr key={c.invId} className={`border-b ${i%2===0?"":"bg-gray-50/40"}`}>
-                            <td className="px-3 py-2">
-                              <div className="font-semibold text-gray-800 truncate max-w-[180px]">{c.name}</div>
-                              <div className="text-gray-400 font-mono">{c.number}</div>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <select value={c.role}
-                                onChange={e=>{
-                                  const next=(prog.children||[]).map(ch=>ch.invId===c.invId?{...ch,role:e.target.value}:ch);
-                                  updateProg({children:next});
-                                }}
-                                className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none bg-white">
-                                <option value="EE-funded">EE-funded</option>
-                                <option value="Customer-funded">Customer-funded</option>
-                                <option value="Shared">Shared</option>
-                              </select>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[c.estClass]||"bg-gray-100 text-gray-500"}`}>{c.estClass||"—"}</span>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColor}`}>
-                                {c.type==="Commercially Funded"?"Commercial":"Internal"}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-right font-semibold" style={{color:EE_BLUE}}>{fmt(c.ee)}</td>
-                            <td className="px-3 py-2 text-right font-semibold" style={{color:CUST_ORG}}>{fmt(c.comm)}</td>
-                            <td className="px-3 py-2 text-center">
-                              <button onClick={()=>removeChild(c.invId)} className="text-gray-300 hover:text-red-500 text-sm font-bold leading-none">✕</button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
 
-              {/* Split method */}
-              {summary.children.length > 0 && (
-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                <div className="flex items-center px-4 py-2.5 bg-gray-50 border-b">
-                  <span className="text-xs font-bold text-gray-700 mr-4">Funding Attribution Split</span>
-                  <div className="flex border border-gray-200 rounded overflow-hidden">
-                    {["percentage","capped","section","item"].map(m=>(
-                      <button key={m} onClick={()=>updateProg({splitMethod:m})}
-                        className={`text-xs px-3 py-1.5 font-semibold transition-colors ${prog.splitMethod===m?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
-                        {METHOD_LABELS[m]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                {summary.children.length===0?(
+                  <div className="text-xs text-gray-400 text-center py-8">No investments added yet.</div>
+                ):(
+                  <div>
+                    {summary.children.map((c,idx)=>{
+                      const isExp=expandedChild===String(c.invId);
+                      const roleColor=c.role==="EE-funded"?EE_BLUE:c.role==="Customer-funded"?CUST_ORG:"#6b7280";
+                      const tagGroups=isExp&&(c.splitMethod==="section"||c.splitMethod==="item")?buildTagGroups(c):[];
 
-                <div className="p-4">
-                  {/* Method controls */}
-                  {prog.splitMethod==="percentage" && (
-                    <div className="flex items-center gap-4 mb-4">
-                      <span className="text-xs text-gray-600 font-semibold min-w-24">EE funded %</span>
-                      <input type="range" min="0" max="100" value={prog.eePct||25}
-                        onChange={e=>updateProg({eePct:parseFloat(e.target.value)})}
-                        className="flex-1"/>
-                      <span className="text-xs font-bold min-w-10 text-right" style={{color:EE_BLUE}}>{prog.eePct||25}%</span>
-                      <span className="text-xs text-gray-400">EE</span>
-                      <span className="text-xs font-bold min-w-10" style={{color:CUST_ORG}}>{100-(prog.eePct||25)}%</span>
-                      <span className="text-xs text-gray-400">Customer</span>
-                    </div>
-                  )}
-                  {prog.splitMethod==="capped" && (
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className="text-xs text-gray-600 font-semibold">EE cap ($)</span>
-                      <input type="number" value={prog.eeCap||7000000} step="100000"
-                        onChange={e=>updateProg({eeCap:parseFloat(e.target.value)})}
-                        className="border border-gray-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
-                      <span className="text-xs text-gray-400">Default: $7,000,000 — RIT-D required to increase</span>
-                    </div>
-                  )}
-
-                  {/* Section / Item tagging tree */}
-                  {(prog.splitMethod==="section"||prog.splitMethod==="item") && (
-                    <div className="mb-4">
-                      <div className="text-xs text-gray-500 mb-2 font-semibold">
-                        {prog.splitMethod==="section" ? "Tag each WBS section as EE-funded or Customer-funded:" : "Tag each estimate line item as EE-funded or Customer-funded:"}
-                      </div>
-                      {tagGroups.length === 0 ? (
-                        <div className="text-xs text-gray-400 italic py-4 text-center">Add investments with entered quantities to see WBS items here.</div>
-                      ) : (
-                        <div className="border border-gray-200 rounded-lg overflow-hidden">
-                          {tagGroups.map(([gk, group])=>{
-                            const isOpen = expandedNodes[gk] !== false; // default open
-                            const tagging = prog.lineTagging || {};
-                            // Summary for this group
-                            const tagged = group.items.filter(t=>tagging[t.key]);
-                            const eeCount = group.items.filter(t=>tagging[t.key]==="EE").length;
-                            const custCount = group.items.filter(t=>tagging[t.key]==="Customer").length;
-                            const untagged = group.items.length - tagged.length;
-                            return (
-                              <div key={gk} className="border-b last:border-b-0">
-                                {/* Group header */}
-                                <div
-                                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100"
-                                  onClick={()=>toggleNode(gk)}>
-                                  <span className="text-xs text-gray-400">{isOpen?"▾":"▸"}</span>
-                                  <span className="text-xs font-mono font-semibold text-gray-700">{gk}</span>
-                                  <span className="text-xs text-gray-400 flex-1">{group.items.length} {prog.splitMethod==="section"?"sections":"items"}</span>
-                                  {/* Bulk assign buttons */}
-                                  <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateTagging(t.key,"EE"));}}
-                                    className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded">All EE</button>
-                                  <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateTagging(t.key,"Customer"));}}
-                                    className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded">All Customer</button>
-                                  <span className="text-xs text-gray-400">{eeCount>0&&<span style={{color:EE_BLUE}}>{eeCount} EE </span>}{custCount>0&&<span style={{color:CUST_ORG}}>{custCount} Cust </span>}{untagged>0&&<span className="text-gray-400">{untagged} untagged</span>}</span>
-                                </div>
-                                {/* Items */}
-                                {isOpen && group.items.map(t=>{
-                                  const tag = tagging[t.key];
-                                  const tagBg = tag==="EE"?"bg-blue-50":tag==="Customer"?"bg-orange-50":"";
-                                  return (
-                                    <div key={t.key} className={`flex items-center gap-2 px-4 py-1.5 border-t border-gray-100 ${tagBg}`}>
-                                      <span className="text-xs font-mono text-blue-700 min-w-32">{t.key}</span>
-                                      <span className="text-xs text-gray-600 flex-1 truncate">{t.label}</span>
-                                      <span className="text-xs text-gray-400">{t.invName}</span>
-                                      <div className="flex border border-gray-200 rounded overflow-hidden">
-                                        {["EE","Customer",""].map((v,vi)=>(
-                                          <button key={vi}
-                                            onClick={()=>updateTagging(t.key, v||undefined)}
-                                            className={`text-xs px-2 py-1 transition-colors ${tag===(v||undefined)
-                                              ? v==="EE" ? "bg-blue-700 text-white"
-                                              : v==="Customer" ? "bg-orange-600 text-white"
-                                              : "bg-gray-200 text-gray-600"
-                                              : "text-gray-500 hover:bg-gray-50"}`}>
-                                            {v||"—"}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Split result bar */}
-                  <div className="border-t border-gray-100 pt-4">
-                    <div className="flex items-center justify-between text-xs mb-2">
-                      <span className="font-semibold" style={{color:EE_BLUE}}>EE funded: {fmt(split.eeSplit)} ({split.eePct}%)</span>
-                      <span className="font-semibold" style={{color:CUST_ORG}}>Customer: {fmt(split.custSplit)} ({split.custPct}%)</span>
-                    </div>
-                    <div className="h-3 rounded-full flex overflow-hidden bg-gray-100">
-                      <div className="h-full transition-all" style={{width:`${split.eePct}%`,background:EE_BLUE}}/>
-                      <div className="h-full transition-all" style={{width:`${split.custPct}%`,background:CUST_ORG}}/>
-                      {split.overCap>0&&<div className="h-full bg-red-500" style={{width:`${pct(split.overCap,summary.totalComm||summary.totalEE)}%`}}/>}
-                    </div>
-                    {split.ritDRequired && (
-                      <div className="mt-2 text-xs bg-red-50 border border-red-200 rounded px-3 py-1.5 text-red-700">
-                        ⚠️ EE contribution exceeds $7M cap by {fmt(split.overCap)}. A RIT-D must be completed before this cap can be increased.
-                      </div>
-                    )}
-
-                    {/* Investment-by-investment breakdown */}
-                    <div className="mt-4">
-                      <div className="text-xs font-semibold text-gray-600 mb-2">Investment breakdown</div>
-                      {summary.children.map(c=>{
-                        const roleColor = c.role==="EE-funded" ? EE_BLUE : c.role==="Customer-funded" ? CUST_ORG : "#6b7280";
-                        const total = c.ee + c.comm;
-                        return (
-                          <div key={c.invId} className="flex items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                      return (
+                        <div key={c.invId} className={`border-b last:border-0 ${isExp?"border-l-4 border-l-blue-500":""}`}>
+                          {/* Row header — click to expand */}
+                          <div
+                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isExp?"bg-blue-50":"hover:bg-gray-50"}`}
+                            onClick={()=>setExpandedChild(isExp?null:String(c.invId))}>
+                            <span className="text-xs text-gray-400">{isExp?"▾":"▸"}</span>
                             <div className="flex-1 min-w-0">
-                              <div className="text-xs font-semibold text-gray-800 truncate">{c.name}</div>
-                              <div className="text-xs text-gray-400">{c.number} · {c.type==="Commercially Funded"?"Commercial":"Internal"}</div>
+                              <div className="text-xs font-semibold text-gray-800 truncate">{c.name||"Unknown"}</div>
+                              <div className="text-xs text-gray-400 font-mono">{c.number} · {c.type==="Commercially Funded"?"Commercial":"Internal"} · {c.estClass}</div>
                             </div>
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
                               style={{background:c.role==="EE-funded"?"#E6F1FB":c.role==="Customer-funded"?"#FFF7ED":"#F1EFE8",color:roleColor}}>
                               {c.role}
                             </span>
-                            <div className="text-right min-w-28">
-                              <div className="text-xs font-semibold" style={{color:EE_BLUE}}>EE: {fmt(c.ee)}</div>
-                              <div className="text-xs font-semibold" style={{color:CUST_ORG}}>Comm: {fmt(c.comm)}</div>
-                            </div>
-                            <div className="w-20">
-                              <div className="h-2 rounded-full flex overflow-hidden bg-gray-100">
-                                {c.ee>0&&<div style={{width:`${pct(c.ee,total)}%`,background:EE_BLUE}} className="h-full"/>}
-                                {c.comm>0&&<div style={{width:`${pct(c.comm,total)}%`,background:CUST_ORG}} className="h-full"/>}
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">{METHOD_LABELS[c.splitMethod||"percentage"]}</span>
+                            {/* Mini split bar */}
+                            <div className="flex items-center gap-2 min-w-36">
+                              <div className="flex-1 h-2 rounded-full flex overflow-hidden bg-gray-100">
+                                <div style={{width:`${c.split.eePct}%`,background:EE_BLUE}} className="h-full transition-all"/>
+                                <div style={{width:`${c.split.custPct}%`,background:CUST_ORG}} className="h-full transition-all"/>
                               </div>
+                              <span className="text-xs font-semibold min-w-16 text-right" style={{color:EE_BLUE}}>{pct(c.split.eeSplit,c.split.eeSplit+c.split.custSplit)}% EE</span>
                             </div>
+                            <div className="text-right min-w-24">
+                              <div className="text-xs font-semibold" style={{color:EE_BLUE}}>{fmt(c.split.eeSplit)}</div>
+                              <div className="text-xs font-semibold" style={{color:CUST_ORG}}>{fmt(c.split.custSplit)}</div>
+                            </div>
+                            <button onClick={e=>{e.stopPropagation();removeChild(c.invId);}} className="text-gray-300 hover:text-red-500 text-sm font-bold ml-1">✕</button>
                           </div>
-                        );
-                      })}
-                    </div>
+
+                          {/* Expanded: per-child split controls */}
+                          {isExp&&(
+                            <div className="bg-white border-t border-blue-100 px-4 py-4 space-y-4">
+
+                              {/* Role + method selectors */}
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-600 mb-1.5">Funding role</div>
+                                  <div className="flex border border-gray-200 rounded overflow-hidden">
+                                    {["EE-funded","Customer-funded","Shared"].map(r=>(
+                                      <button key={r} onClick={()=>updateChild(c.invId,{role:r})}
+                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${c.role===r?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{r}</button>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-600 mb-1.5">Attribution method</div>
+                                  <div className="flex border border-gray-200 rounded overflow-hidden">
+                                    {["percentage","capped","section","item"].map(m=>(
+                                      <button key={m} onClick={()=>updateChild(c.invId,{splitMethod:m})}
+                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${(c.splitMethod||"percentage")===m?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
+                                        {METHOD_LABELS[m]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <div className="text-xs text-gray-400 mt-1">{METHOD_DESCS[c.splitMethod||"percentage"]}</div>
+                                </div>
+                              </div>
+
+                              {/* Method-specific controls */}
+                              {(c.splitMethod||"percentage")==="percentage"&&(
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-xs font-semibold text-gray-600 mb-2">EE funded percentage</div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs text-gray-500 min-w-20">0% Customer</span>
+                                    <input type="range" min="0" max="100" step="5" value={c.eePct??25}
+                                      onChange={e=>updateChild(c.invId,{eePct:parseFloat(e.target.value)})}
+                                      className="flex-1"/>
+                                    <span className="text-xs text-gray-500 min-w-20 text-right">100% EE</span>
+                                  </div>
+                                  <div className="flex justify-between mt-2">
+                                    <span className="text-xs font-bold" style={{color:EE_BLUE}}>EE: {c.eePct??25}% — {fmt((c.comm||c.ee)*(c.eePct??25)/100)}</span>
+                                    <span className="text-xs font-bold" style={{color:CUST_ORG}}>Customer: {100-(c.eePct??25)}% — {fmt((c.comm||c.ee)*(100-(c.eePct??25))/100)}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {(c.splitMethod)==="capped"&&(
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-xs font-semibold text-gray-600 mb-2">EE contribution cap</div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-xs text-gray-500">Cap ($)</span>
+                                    <input type="number" value={c.eeCap||7000000} step="100000"
+                                      onChange={e=>updateChild(c.invId,{eeCap:parseFloat(e.target.value)})}
+                                      className="border border-gray-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                                    <span className="text-xs text-gray-400">Default $7M — RIT-D required to increase</span>
+                                  </div>
+                                  {c.split.ritD&&<div className="mt-2 text-xs bg-red-50 border border-red-200 rounded px-3 py-1.5 text-red-700">⚠️ Cap exceeded by {fmt(c.split.overCap)}. RIT-D required.</div>}
+                                </div>
+                              )}
+
+                              {(c.splitMethod==="section"||c.splitMethod==="item")&&(
+                                <div>
+                                  <div className="text-xs font-semibold text-gray-600 mb-2">
+                                    {c.splitMethod==="section"?"Tag WBS sections (L3) to a funder:":"Tag individual estimate line items to a funder:"}
+                                  </div>
+                                  {tagGroups.length===0?(
+                                    <div className="text-xs text-gray-400 italic py-4 text-center bg-gray-50 rounded-lg">No entered quantities found for this investment. Enter quantities and save first.</div>
+                                  ):(
+                                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                                      {tagGroups.map(([gk,group])=>{
+                                        const isOpen=expandedNodes[`${c.invId}_${gk}`]!==false;
+                                        const tagging=c.lineTagging||{};
+                                        const eeCount=group.items.filter(t=>tagging[t.key]==="EE").length;
+                                        const custCount=group.items.filter(t=>tagging[t.key]==="Customer").length;
+                                        const untagged=group.items.length-eeCount-custCount;
+                                        return (
+                                          <div key={gk} className="border-b last:border-0">
+                                            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                              onClick={()=>toggleNode(`${c.invId}_${gk}`)}>
+                                              <span className="text-xs text-gray-400">{isOpen?"▾":"▸"}</span>
+                                              <span className="text-xs font-mono font-semibold text-gray-700">{gk}</span>
+                                              <span className="text-xs text-gray-400 flex-1">{group.items.length} {c.splitMethod==="section"?"sections":"items"}</span>
+                                              <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateChildTagging(c.invId,t.key,"EE"));}}
+                                                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded">All EE</button>
+                                              <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateChildTagging(c.invId,t.key,"Customer"));}}
+                                                className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded">All Cust</button>
+                                              <span className="text-xs text-gray-400">
+                                                {eeCount>0&&<span style={{color:EE_BLUE}}>{eeCount} EE </span>}
+                                                {custCount>0&&<span style={{color:CUST_ORG}}>{custCount} Cust </span>}
+                                                {untagged>0&&<span>{untagged} untagged</span>}
+                                              </span>
+                                            </div>
+                                            {isOpen&&group.items.map(t=>{
+                                              const tag=tagging[t.key];
+                                              return (
+                                                <div key={t.key} className={`flex items-center gap-2 px-5 py-1.5 border-t border-gray-100 ${tag==="EE"?"bg-blue-50":tag==="Customer"?"bg-orange-50":""}`}>
+                                                  <span className="text-xs font-mono text-blue-700 min-w-36">{t.key}</span>
+                                                  <span className="text-xs text-gray-600 flex-1 truncate">{t.label}</span>
+                                                  <div className="flex border border-gray-200 rounded overflow-hidden">
+                                                    {["EE","Customer",""].map((v,vi)=>(
+                                                      <button key={vi}
+                                                        onClick={()=>updateChildTagging(c.invId,t.key,v||undefined)}
+                                                        className={`text-xs px-2.5 py-1 transition-colors ${tag===(v||undefined)
+                                                          ?v==="EE"?"bg-blue-700 text-white":v==="Customer"?"bg-orange-600 text-white":"bg-gray-300 text-gray-700"
+                                                          :"text-gray-500 hover:bg-gray-50"}`}>
+                                                        {v||"—"}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* This child's resolved split */}
+                              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                                <div className="text-xs font-semibold text-gray-600 mb-2">Resolved attribution for this investment</div>
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span style={{color:EE_BLUE}}>EE: {fmt(c.split.eeSplit)} ({c.split.eePct}%)</span>
+                                  <span style={{color:CUST_ORG}}>Customer: {fmt(c.split.custSplit)} ({c.split.custPct}%)</span>
+                                </div>
+                                <div className="h-2 rounded-full flex overflow-hidden bg-gray-200">
+                                  <div style={{width:`${c.split.eePct}%`,background:EE_BLUE}} className="h-full transition-all"/>
+                                  <div style={{width:`${c.split.custPct}%`,background:CUST_ORG}} className="h-full transition-all"/>
+                                </div>
+                              </div>
+
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </div>
+                )}
               </div>
-              )}
 
             </div>
           </div>
@@ -4476,7 +4283,7 @@ ${invRows}
       </div>
 
       {/* ── New Programme modal ── */}
-      {showNewProg && (
+      {showNewProg&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.45)"}}>
           <div className="bg-white rounded-xl shadow-2xl p-6 w-[420px]">
             <div className="text-sm font-bold text-gray-900 mb-4">New Programme</div>
@@ -4489,8 +4296,7 @@ ${invRows}
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-semibold block mb-1">Programme number (optional)</label>
-                <input value={newProgNum} onChange={e=>setNewProgNum(e.target.value)}
-                  placeholder="e.g. PROG-2026-001"
+                <input value={newProgNum} onChange={e=>setNewProgNum(e.target.value)} placeholder="e.g. PROG-2026-001"
                   className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"/>
               </div>
             </div>
@@ -4504,7 +4310,7 @@ ${invRows}
       )}
 
       {/* ── Add investment modal ── */}
-      {showAddInv && (
+      {showAddInv&&(
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.45)"}}>
           <div className="bg-white rounded-xl shadow-2xl p-6 w-[480px]">
             <div className="text-sm font-bold text-gray-900 mb-4">Add Investment to Programme</div>
@@ -4524,14 +4330,12 @@ ${invRows}
                 <div className="flex gap-2">
                   {["EE-funded","Customer-funded","Shared"].map(r=>(
                     <button key={r} onClick={()=>setAddInvRole(r)}
-                      className={`flex-1 text-xs py-2 rounded border font-semibold transition-colors ${addInvRole===r?"border-blue-700 bg-blue-700 text-white":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                      {r}
-                    </button>
+                      className={`flex-1 text-xs py-2 rounded border font-semibold transition-colors ${addInvRole===r?"border-blue-700 bg-blue-700 text-white":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>{r}</button>
                   ))}
                 </div>
               </div>
-              {addInvId && (()=>{
-                const inv = findById(addInvId);
+              {addInvId&&(()=>{
+                const inv=findById(addInvId);
                 if(!inv) return null;
                 return (
                   <div className="bg-gray-50 rounded-lg p-3 text-xs">
@@ -4557,6 +4361,7 @@ ${invRows}
     </div>
   );
 }
+
 
 function SavedInvestments({ onLoad }) {
   return <InvestmentHub onLoad={onLoad}/>;
