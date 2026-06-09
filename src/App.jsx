@@ -128,7 +128,7 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
     const costByResource = {};
     items.forEach(item => {
       const ln = lines[item.wbs_code] || {};
-      const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial, ln.resourceOvrd, ratesLookup, pctBaseLookup[item.wbs_code] || 0);
+      const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial, ln.resourceOvrd, null, 0);
       const isContr = (ln.delivery||item.delivery_method||"") === "Contractor Delivered";
       const res = isContr ? "Contractor" : (item.resource_main || "ZS Electrical Technician");
       if (!costByResource[res]) costByResource[res] = {hours:0, dollars:0};
