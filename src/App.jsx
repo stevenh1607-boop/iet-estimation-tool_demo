@@ -3269,6 +3269,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
         {[
           {id:"portfolio", label:"📋 Portfolio"},
           {id:"templates", label:"🏗️ Template Library"},
+          {id:"split",     label:"💰 Contribution Split"},
         ].map(t=>(
           <button key={t.id} onClick={()=>setHubTab(t.id)}
             className={`text-xs px-4 py-2.5 font-semibold border-b-2 transition-colors ${hubTab===t.id?"border-blue-700 text-blue-700":"border-transparent text-gray-500 hover:text-gray-700"}`}>
@@ -3288,6 +3289,9 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
 
       {/* Template Library tab */}
       {hubTab==="templates" && <TemplateLibrary onLoad={onLoad} saved={saved} setSaved={setSaved}/>}
+
+      {/* Contribution Split tab */}
+      {hubTab==="split" && <ContributionSplitTab saved={saved} setSaved={setSaved}/>}
 
       {/* Portfolio tab */}
       {hubTab==="portfolio" && <div className="flex flex-1 overflow-hidden">
@@ -3685,6 +3689,606 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
 }
 
 // ── OLD SAVED INVESTMENTS (now replaced by hub) ──
+
+// ── CONTRIBUTION SPLIT TAB ───────────────────────────────────────
+// Reporting-only feature. Groups multiple saved investments (any type/rate)
+// under a parent programme node and shows a funding split breakdown.
+// Split methods: Percentage | WBS Section | WBS Item | Capped EE
+// EE Internal vs Commercial are SEPARATE rate streams — this is purely
+// a reporting/financial planning attribution tool, NOT tied to Copperleaf.
+function ContributionSplitTab({ saved, setSaved }) {
+  const { supply, wbs: wbsMaster, commLookup } = useData();
+  const fmt = (n) => `$${Math.round(n||0).toLocaleString("en-AU")}`;
+  const pct = (a,b) => b>0 ? Math.round(a/b*100) : 0;
+
+  // ── Programmes stored in localStorage ───────────────────────
+  const [programmes, setProgrammes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("iet_programmes") || "[]"); } catch(e){ return []; }
+  });
+  const saveProgrammes = (p) => {
+    setProgrammes(p);
+    localStorage.setItem("iet_programmes", JSON.stringify(p));
+  };
+
+  const [selectedProg, setSelectedProg]   = useState(null);
+  const [showNewProg, setShowNewProg]     = useState(false);
+  const [newProgName, setNewProgName]     = useState("");
+  const [newProgNum,  setNewProgNum]      = useState("");
+  const [showAddInv,  setShowAddInv]      = useState(false);
+  const [addInvRole,  setAddInvRole]      = useState("EE-funded");
+  const [addInvId,    setAddInvId]        = useState("");
+
+  // Split method state per programme (stored with programme)
+  const prog = programmes.find(p=>p.id===selectedProg) || null;
+
+  // ── WBS tree for Methods 2 & 3 ──────────────────────────────
+  // Build L1→L3 hierarchy from supply items of a given investment
+  const buildWbsTree = (invId) => {
+    const inv = saved.find(s=>s.id===invId);
+    if (!inv) return [];
+    const lines = inv.lines || {};
+    const entered = supply.filter(s => parseFloat(lines[s.wbs_code]?.qty||"0") > 0);
+    const l1Map = {};
+    entered.forEach(item => {
+      const parts = item.wbs_code.split(".");
+      const l1 = parts[0], l2 = parts.slice(0,2).join("."), l3 = parts.slice(0,3).join(".");
+      if (!l1Map[l1]) l1Map[l1] = { code:l1, label:`Phase ${l1}`, children:{}, expanded:true };
+      if (!l1Map[l1].children[l2]) l1Map[l1].children[l2] = { code:l2, label:`${l2} — Group`, children:{} };
+      if (!l1Map[l1].children[l2].children[l3]) l1Map[l1].children[l3] = { code:l3, label:`${l3}`, items:[] };
+      (l1Map[l1].children[l2].children[l3] || { items:[] }).items?.push(item);
+    });
+    return Object.values(l1Map);
+  };
+
+  // ── Compute totals for a child investment in this programme ─
+  const getInvTotals = (invId) => {
+    const inv = saved.find(s=>s.id===invId);
+    if (!inv) return { ee:0, comm:0, name:"Unknown", type:"" };
+    return { ee: inv.totalEE||0, comm: inv.totalComm||0, name: inv.inv?.name||"Unnamed", number: inv.inv?.number||"", type: inv.inv?.type||"", estClass: inv.inv?.estClass||"" };
+  };
+
+  // ── Compute programme summary ────────────────────────────────
+  const getProgSummary = (p) => {
+    if (!p) return { totalEE:0, totalComm:0, children:[] };
+    const children = (p.children||[]).map(c => {
+      const t = getInvTotals(c.invId);
+      return {...c, ...t};
+    });
+    return {
+      totalEE:   children.reduce((a,c)=>a+c.ee,0),
+      totalComm: children.reduce((a,c)=>a+c.comm,0),
+      children,
+    };
+  };
+
+  // ── Split calculation ─────────────────────────────────────────
+  const calcSplit = (p, summary) => {
+    if (!p || !summary.children.length) return { eeSplit:0, custSplit:0, eePct:0, custPct:0, overCap:0, ritDRequired:false };
+    const method = p.splitMethod || "percentage";
+    const total = summary.totalComm > 0 ? summary.totalComm : summary.totalEE;
+
+    if (method === "percentage") {
+      const eeP = parseFloat(p.eePct||25)/100;
+      const eeSplit   = total * eeP;
+      const custSplit = total * (1-eeP);
+      return { eeSplit, custSplit, eePct: Math.round(eeP*100), custPct: Math.round((1-eeP)*100), overCap:0, ritDRequired:false };
+    }
+    if (method === "capped") {
+      const cap       = parseFloat(p.eeCap||7000000);
+      const eeSplit   = Math.min(total, cap);
+      const custSplit = Math.max(0, total - cap);
+      const overCap   = custSplit;
+      return { eeSplit, custSplit, eePct: pct(eeSplit,total), custPct: pct(custSplit,total), overCap, ritDRequired: overCap > 0 };
+    }
+    if (method === "section" || method === "item") {
+      // Sum tagged amounts from prog.lineTagging: { wbs_code: "EE"|"Customer" }
+      const tagging = p.lineTagging || {};
+      let eeAmount = 0, custAmount = 0;
+      (summary.children||[]).forEach(c => {
+        const inv = saved.find(s=>s.id===c.invId);
+        if (!inv) return;
+        const lines = inv.lines || {};
+        supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0).forEach(item => {
+          const tagKey = method==="section"
+            ? item.wbs_code.split(".").slice(0,3).join(".")
+            : item.wbs_code;
+          const tag = tagging[tagKey];
+          const cost = c.ee; // simplified: use EE internal cost for both — real system would calculate per-line
+          if (tag === "EE") eeAmount += (inv.phaseBreakdown?.[item.wbs_code.split(".")[0]]?.eeInt || 0);
+          else if (tag === "Customer") custAmount += (inv.phaseBreakdown?.[item.wbs_code.split(".")[0]]?.eeInt || 0);
+        });
+      });
+      // Fallback: if nothing tagged, use totals
+      if (eeAmount + custAmount === 0) { eeAmount = total * 0.5; custAmount = total * 0.5; }
+      return { eeSplit:eeAmount, custSplit:custAmount, eePct: pct(eeAmount,total), custPct: pct(custAmount,total), overCap:0, ritDRequired:false };
+    }
+    return { eeSplit:0, custSplit:0, eePct:0, custPct:0, overCap:0, ritDRequired:false };
+  };
+
+  // ── WBS Tree for section/item tagging ────────────────────────
+  const [expandedNodes, setExpandedNodes] = useState({});
+  const toggleNode = (code) => setExpandedNodes(e=>({...e,[code]:!e[code]}));
+
+  const updateProg = (updates) => {
+    const next = programmes.map(p=>p.id===selectedProg?{...p,...updates}:p);
+    saveProgrammes(next);
+  };
+  const updateTagging = (key, value) => {
+    const current = prog?.lineTagging || {};
+    const next = {...current, [key]: value};
+    updateProg({ lineTagging: next });
+  };
+
+  const createProg = () => {
+    if (!newProgName.trim()) return;
+    const newP = {
+      id: `prog_${Date.now()}`,
+      name: newProgName.trim(),
+      number: newProgNum.trim(),
+      createdAt: new Date().toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric"}),
+      children: [],
+      splitMethod: "percentage",
+      eePct: 25,
+      eeCap: 7000000,
+      lineTagging: {},
+    };
+    const next = [...programmes, newP];
+    saveProgrammes(next);
+    setSelectedProg(newP.id);
+    setShowNewProg(false);
+    setNewProgName(""); setNewProgNum("");
+  };
+  const deleteProg = (id) => {
+    saveProgrammes(programmes.filter(p=>p.id!==id));
+    if (selectedProg===id) setSelectedProg(null);
+  };
+  const addChildInv = () => {
+    if (!addInvId || !prog) return;
+    if (prog.children.find(c=>c.invId===addInvId)) { setShowAddInv(false); return; }
+    updateProg({ children: [...(prog.children||[]), { invId: addInvId, role: addInvRole }] });
+    setShowAddInv(false); setAddInvId("");
+  };
+  const removeChild = (invId) => {
+    updateProg({ children: (prog.children||[]).filter(c=>c.invId!==invId) });
+  };
+
+  const summary = getProgSummary(prog);
+  const split   = calcSplit(prog, summary);
+  const METHOD_LABELS = { percentage:"Percentage", capped:"Capped EE ($7M)", section:"WBS Section", item:"WBS Item" };
+
+  // Investments not already in this programme
+  const availableInvs = saved.filter(s=>!(prog?.children||[]).find(c=>c.invId===s.id));
+
+  // Build flat WBS section list from all children for section/item tagging
+  const tagItems = useMemo(() => {
+    if (!prog) return [];
+    const items = [];
+    const method = prog.splitMethod;
+    if (method !== "section" && method !== "item") return [];
+    (prog.children||[]).forEach(c => {
+      const inv = saved.find(s=>s.id===c.invId);
+      if (!inv) return;
+      const lines = inv.lines || {};
+      const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
+      const seen = new Set();
+      entered.forEach(item => {
+        const key = method==="section" ? item.wbs_code.split(".").slice(0,3).join(".") : item.wbs_code;
+        if (seen.has(key)) return;
+        seen.add(key);
+        items.push({
+          key,
+          label: method==="section" ? key : item.description || key,
+          invName: inv.inv?.name || inv.inv?.number || "Unknown",
+          invId: c.invId,
+          l1: item.wbs_code.split(".")[0],
+          l2: item.wbs_code.split(".").slice(0,2).join("."),
+          isSection: method==="section",
+        });
+      });
+    });
+    return items.sort((a,b)=>a.key.localeCompare(b.key));
+  },[prog, saved, supply]);
+
+  // Group tagItems by L2 for section method
+  const tagGroups = useMemo(() => {
+    const g = {};
+    tagItems.forEach(t => {
+      const gk = t.l2 || t.l1;
+      if (!g[gk]) g[gk] = { label: gk, items:[] };
+      g[gk].items.push(t);
+    });
+    return Object.entries(g).sort(([a],[b])=>a.localeCompare(b));
+  },[tagItems]);
+
+  const EE_BLUE   = "#1e3a5f";
+  const CUST_ORG  = "#ea580c";
+
+  return (
+    <div className="flex flex-1 overflow-hidden">
+      {/* ── Left: Programme list ── */}
+      <div className="w-64 flex-shrink-0 border-r bg-white flex flex-col overflow-hidden">
+        <div className="px-3 py-2.5 border-b flex items-center justify-between">
+          <span className="text-xs font-bold text-gray-700">Programmes</span>
+          <button onClick={()=>setShowNewProg(true)}
+            className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">+ New</button>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {programmes.length === 0 && (
+            <div className="text-xs text-gray-400 text-center px-4 py-8">No programmes yet. Create one to group investments and model funding splits.</div>
+          )}
+          {programmes.map(p => {
+            const s = getProgSummary(p);
+            const isSel = selectedProg===p.id;
+            return (
+              <div key={p.id}
+                onClick={()=>setSelectedProg(isSel?null:p.id)}
+                className={`px-3 py-2.5 border-b cursor-pointer transition-colors ${isSel?"bg-blue-50 border-l-4 border-l-blue-700":"hover:bg-gray-50"}`}>
+                <div className={`font-semibold text-xs truncate ${isSel?"text-blue-800":"text-gray-800"}`}>{p.name}</div>
+                {p.number && <div className="text-xs text-gray-400 font-mono">{p.number}</div>}
+                <div className="text-xs text-gray-500 mt-0.5">{s.children.length} investments</div>
+                <div className="text-xs font-semibold" style={{color:EE_BLUE}}>EE {fmt(s.totalEE)}</div>
+                <div className="text-xs font-semibold" style={{color:CUST_ORG}}>Comm {fmt(s.totalComm)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Right: Programme detail ── */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+        {!prog ? (
+          <div className="flex-1 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <div className="text-3xl mb-2">💰</div>
+              <div className="text-sm font-semibold">Select or create a programme</div>
+              <div className="text-xs mt-1 max-w-xs">Group investments under a parent programme node and model how costs are attributed between EE and the customer.</div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="max-w-5xl mx-auto space-y-4">
+
+              {/* Programme header */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-lg font-bold text-gray-900">{prog.name}</div>
+                    {prog.number && <div className="text-xs text-gray-400 font-mono">{prog.number} · Created {prog.createdAt}</div>}
+                  </div>
+                  <button onClick={()=>deleteProg(prog.id)} className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded">Delete programme</button>
+                </div>
+              </div>
+
+              {/* Summary totals */}
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  {label:"Investments",value:summary.children.length,plain:true},
+                  {label:"Total EE Internal",value:fmt(summary.totalEE),color:EE_BLUE},
+                  {label:"Total Commercial",value:fmt(summary.totalComm),color:CUST_ORG},
+                  {label:"Combined",value:fmt(summary.totalEE+summary.totalComm),plain:true},
+                ].map((m,i)=>(
+                  <div key={i} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-500">{m.label}</div>
+                    <div className="text-base font-bold mt-0.5" style={m.color?{color:m.color}:{}}>{m.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Child investments */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
+                  <span className="text-xs font-bold text-gray-700">Child Investments</span>
+                  <button onClick={()=>setShowAddInv(true)}
+                    className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded font-semibold">+ Add investment</button>
+                </div>
+                {summary.children.length === 0 ? (
+                  <div className="text-xs text-gray-400 text-center py-8">No investments added yet. Click "Add investment" to link saved estimates to this programme.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold text-gray-600">Investment</th>
+                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Role</th>
+                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Class</th>
+                        <th className="px-3 py-2 font-semibold text-gray-600 text-center">Type</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600">EE Internal</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600">Commercial</th>
+                        <th className="px-3 py-2 w-12"/>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {summary.children.map((c,i)=>{
+                        const roleColor = c.role==="EE-funded"
+                          ? "bg-blue-100 text-blue-700"
+                          : c.role==="Customer-funded"
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-gray-100 text-gray-600";
+                        const typeColor = c.type==="Commercially Funded"?"bg-orange-50 text-orange-700":"bg-blue-50 text-blue-700";
+                        return (
+                          <tr key={c.invId} className={`border-b ${i%2===0?"":"bg-gray-50/40"}`}>
+                            <td className="px-3 py-2">
+                              <div className="font-semibold text-gray-800 truncate max-w-[180px]">{c.name}</div>
+                              <div className="text-gray-400 font-mono">{c.number}</div>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <select value={c.role}
+                                onChange={e=>{
+                                  const next=(prog.children||[]).map(ch=>ch.invId===c.invId?{...ch,role:e.target.value}:ch);
+                                  updateProg({children:next});
+                                }}
+                                className="text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none bg-white">
+                                <option value="EE-funded">EE-funded</option>
+                                <option value="Customer-funded">Customer-funded</option>
+                                <option value="Shared">Shared</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[c.estClass]||"bg-gray-100 text-gray-500"}`}>{c.estClass||"—"}</span>
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${typeColor}`}>
+                                {c.type==="Commercially Funded"?"Commercial":"Internal"}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold" style={{color:EE_BLUE}}>{fmt(c.ee)}</td>
+                            <td className="px-3 py-2 text-right font-semibold" style={{color:CUST_ORG}}>{fmt(c.comm)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <button onClick={()=>removeChild(c.invId)} className="text-gray-300 hover:text-red-500 text-sm font-bold leading-none">✕</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Split method */}
+              {summary.children.length > 0 && (
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="flex items-center px-4 py-2.5 bg-gray-50 border-b">
+                  <span className="text-xs font-bold text-gray-700 mr-4">Funding Attribution Split</span>
+                  <div className="flex border border-gray-200 rounded overflow-hidden">
+                    {["percentage","capped","section","item"].map(m=>(
+                      <button key={m} onClick={()=>updateProg({splitMethod:m})}
+                        className={`text-xs px-3 py-1.5 font-semibold transition-colors ${prog.splitMethod===m?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
+                        {METHOD_LABELS[m]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-4">
+                  {/* Method controls */}
+                  {prog.splitMethod==="percentage" && (
+                    <div className="flex items-center gap-4 mb-4">
+                      <span className="text-xs text-gray-600 font-semibold min-w-24">EE funded %</span>
+                      <input type="range" min="0" max="100" value={prog.eePct||25}
+                        onChange={e=>updateProg({eePct:parseFloat(e.target.value)})}
+                        className="flex-1"/>
+                      <span className="text-xs font-bold min-w-10 text-right" style={{color:EE_BLUE}}>{prog.eePct||25}%</span>
+                      <span className="text-xs text-gray-400">EE</span>
+                      <span className="text-xs font-bold min-w-10" style={{color:CUST_ORG}}>{100-(prog.eePct||25)}%</span>
+                      <span className="text-xs text-gray-400">Customer</span>
+                    </div>
+                  )}
+                  {prog.splitMethod==="capped" && (
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-xs text-gray-600 font-semibold">EE cap ($)</span>
+                      <input type="number" value={prog.eeCap||7000000} step="100000"
+                        onChange={e=>updateProg({eeCap:parseFloat(e.target.value)})}
+                        className="border border-gray-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      <span className="text-xs text-gray-400">Default: $7,000,000 — RIT-D required to increase</span>
+                    </div>
+                  )}
+
+                  {/* Section / Item tagging tree */}
+                  {(prog.splitMethod==="section"||prog.splitMethod==="item") && (
+                    <div className="mb-4">
+                      <div className="text-xs text-gray-500 mb-2 font-semibold">
+                        {prog.splitMethod==="section" ? "Tag each WBS section as EE-funded or Customer-funded:" : "Tag each estimate line item as EE-funded or Customer-funded:"}
+                      </div>
+                      {tagGroups.length === 0 ? (
+                        <div className="text-xs text-gray-400 italic py-4 text-center">Add investments with entered quantities to see WBS items here.</div>
+                      ) : (
+                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                          {tagGroups.map(([gk, group])=>{
+                            const isOpen = expandedNodes[gk] !== false; // default open
+                            const tagging = prog.lineTagging || {};
+                            // Summary for this group
+                            const tagged = group.items.filter(t=>tagging[t.key]);
+                            const eeCount = group.items.filter(t=>tagging[t.key]==="EE").length;
+                            const custCount = group.items.filter(t=>tagging[t.key]==="Customer").length;
+                            const untagged = group.items.length - tagged.length;
+                            return (
+                              <div key={gk} className="border-b last:border-b-0">
+                                {/* Group header */}
+                                <div
+                                  className="flex items-center gap-2 px-3 py-2 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                  onClick={()=>toggleNode(gk)}>
+                                  <span className="text-xs text-gray-400">{isOpen?"▾":"▸"}</span>
+                                  <span className="text-xs font-mono font-semibold text-gray-700">{gk}</span>
+                                  <span className="text-xs text-gray-400 flex-1">{group.items.length} {prog.splitMethod==="section"?"sections":"items"}</span>
+                                  {/* Bulk assign buttons */}
+                                  <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateTagging(t.key,"EE"));}}
+                                    className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded">All EE</button>
+                                  <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateTagging(t.key,"Customer"));}}
+                                    className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded">All Customer</button>
+                                  <span className="text-xs text-gray-400">{eeCount>0&&<span style={{color:EE_BLUE}}>{eeCount} EE </span>}{custCount>0&&<span style={{color:CUST_ORG}}>{custCount} Cust </span>}{untagged>0&&<span className="text-gray-400">{untagged} untagged</span>}</span>
+                                </div>
+                                {/* Items */}
+                                {isOpen && group.items.map(t=>{
+                                  const tag = tagging[t.key];
+                                  const tagBg = tag==="EE"?"bg-blue-50":tag==="Customer"?"bg-orange-50":"";
+                                  return (
+                                    <div key={t.key} className={`flex items-center gap-2 px-4 py-1.5 border-t border-gray-100 ${tagBg}`}>
+                                      <span className="text-xs font-mono text-blue-700 min-w-32">{t.key}</span>
+                                      <span className="text-xs text-gray-600 flex-1 truncate">{t.label}</span>
+                                      <span className="text-xs text-gray-400">{t.invName}</span>
+                                      <div className="flex border border-gray-200 rounded overflow-hidden">
+                                        {["EE","Customer",""].map((v,vi)=>(
+                                          <button key={vi}
+                                            onClick={()=>updateTagging(t.key, v||undefined)}
+                                            className={`text-xs px-2 py-1 transition-colors ${tag===(v||undefined)
+                                              ? v==="EE" ? "bg-blue-700 text-white"
+                                              : v==="Customer" ? "bg-orange-600 text-white"
+                                              : "bg-gray-200 text-gray-600"
+                                              : "text-gray-500 hover:bg-gray-50"}`}>
+                                            {v||"—"}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Split result bar */}
+                  <div className="border-t border-gray-100 pt-4">
+                    <div className="flex items-center justify-between text-xs mb-2">
+                      <span className="font-semibold" style={{color:EE_BLUE}}>EE funded: {fmt(split.eeSplit)} ({split.eePct}%)</span>
+                      <span className="font-semibold" style={{color:CUST_ORG}}>Customer: {fmt(split.custSplit)} ({split.custPct}%)</span>
+                    </div>
+                    <div className="h-3 rounded-full flex overflow-hidden bg-gray-100">
+                      <div className="h-full transition-all" style={{width:`${split.eePct}%`,background:EE_BLUE}}/>
+                      <div className="h-full transition-all" style={{width:`${split.custPct}%`,background:CUST_ORG}}/>
+                      {split.overCap>0&&<div className="h-full bg-red-500" style={{width:`${pct(split.overCap,summary.totalComm||summary.totalEE)}%`}}/>}
+                    </div>
+                    {split.ritDRequired && (
+                      <div className="mt-2 text-xs bg-red-50 border border-red-200 rounded px-3 py-1.5 text-red-700">
+                        ⚠️ EE contribution exceeds $7M cap by {fmt(split.overCap)}. A RIT-D must be completed before this cap can be increased.
+                      </div>
+                    )}
+
+                    {/* Investment-by-investment breakdown */}
+                    <div className="mt-4">
+                      <div className="text-xs font-semibold text-gray-600 mb-2">Investment breakdown</div>
+                      {summary.children.map(c=>{
+                        const roleColor = c.role==="EE-funded" ? EE_BLUE : c.role==="Customer-funded" ? CUST_ORG : "#6b7280";
+                        const total = c.ee + c.comm;
+                        return (
+                          <div key={c.invId} className="flex items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs font-semibold text-gray-800 truncate">{c.name}</div>
+                              <div className="text-xs text-gray-400">{c.number} · {c.type==="Commercially Funded"?"Commercial":"Internal"}</div>
+                            </div>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                              style={{background:c.role==="EE-funded"?"#E6F1FB":c.role==="Customer-funded"?"#FFF7ED":"#F1EFE8",color:roleColor}}>
+                              {c.role}
+                            </span>
+                            <div className="text-right min-w-28">
+                              <div className="text-xs font-semibold" style={{color:EE_BLUE}}>EE: {fmt(c.ee)}</div>
+                              <div className="text-xs font-semibold" style={{color:CUST_ORG}}>Comm: {fmt(c.comm)}</div>
+                            </div>
+                            <div className="w-20">
+                              <div className="h-2 rounded-full flex overflow-hidden bg-gray-100">
+                                {c.ee>0&&<div style={{width:`${pct(c.ee,total)}%`,background:EE_BLUE}} className="h-full"/>}
+                                {c.comm>0&&<div style={{width:`${pct(c.comm,total)}%`,background:CUST_ORG}} className="h-full"/>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              )}
+
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── New Programme modal ── */}
+      {showNewProg && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.45)"}}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[420px]">
+            <div className="text-sm font-bold text-gray-900 mb-4">New Programme</div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 font-semibold block mb-1">Programme name *</label>
+                <input autoFocus value={newProgName} onChange={e=>setNewProgName(e.target.value)}
+                  placeholder="e.g. Marulan Augmentation Programme"
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-semibold block mb-1">Programme number (optional)</label>
+                <input value={newProgNum} onChange={e=>setNewProgNum(e.target.value)}
+                  placeholder="e.g. PROG-2026-001"
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={()=>setShowNewProg(false)} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={createProg} disabled={!newProgName.trim()}
+                className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Create Programme</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add investment modal ── */}
+      {showAddInv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.45)"}}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-[480px]">
+            <div className="text-sm font-bold text-gray-900 mb-4">Add Investment to Programme</div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 font-semibold block mb-1">Select saved investment</label>
+                <select value={addInvId} onChange={e=>setAddInvId(e.target.value)}
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+                  <option value="">— choose investment —</option>
+                  {availableInvs.map(s=>(
+                    <option key={s.id} value={s.id}>{s.inv?.name||"Unnamed"} ({s.inv?.number||"no number"}) · {s.inv?.type==="Commercially Funded"?"Commercial":"Internal"}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-semibold block mb-1">Funding role in programme</label>
+                <div className="flex gap-2">
+                  {["EE-funded","Customer-funded","Shared"].map(r=>(
+                    <button key={r} onClick={()=>setAddInvRole(r)}
+                      className={`flex-1 text-xs py-2 rounded border font-semibold transition-colors ${addInvRole===r?"border-blue-700 bg-blue-700 text-white":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {addInvId && (()=>{
+                const inv = saved.find(s=>s.id===addInvId);
+                if(!inv) return null;
+                return (
+                  <div className="bg-gray-50 rounded-lg p-3 text-xs">
+                    <div className="font-semibold text-gray-700 mb-1">{inv.inv?.name}</div>
+                    <div className="grid grid-cols-2 gap-1 text-gray-500">
+                      <span>EE Internal:</span><span className="font-semibold" style={{color:EE_BLUE}}>{fmt(inv.totalEE)}</span>
+                      <span>Commercial:</span><span className="font-semibold" style={{color:CUST_ORG}}>{fmt(inv.totalComm)}</span>
+                      <span>Class:</span><span>{inv.inv?.estClass}</span>
+                      <span>Status:</span><span>{inv.status||"Draft"}</span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={()=>{setShowAddInv(false);setAddInvId("");}} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={addChildInv} disabled={!addInvId}
+                className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Add to Programme</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SavedInvestments({ onLoad }) {
   return <InvestmentHub onLoad={onLoad}/>;
 }
@@ -3969,6 +4573,45 @@ function ScalingEditor({ managerMode, onUnlock }) {
     if (item.profile_id) profileCounts[item.profile_id] = (profileCounts[item.profile_id]||0)+1;
   });
 
+  const [scaleTab, setScaleTab] = useState("tiers");
+  const [wbsSearch, setWbsSearch] = useState("");
+  const [wbsScopeFilter, setWbsScopeFilter] = useState("All");
+  const [wbsSectionFilter, setWbsSectionFilter] = useState("All");
+  // Per-investment profile overrides: { wbs_code: profileId|"none" }
+  const [wbsProfileOverrides, setWbsProfileOverrides] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("iet_wbs_profile_overrides") || "{}"); } catch(e){ return {}; }
+  });
+  const setWbsOverride = (wbsCode, profileId) => {
+    const next = {...wbsProfileOverrides, [wbsCode]: profileId};
+    setWbsProfileOverrides(next);
+    localStorage.setItem("iet_wbs_profile_overrides", JSON.stringify(next));
+  };
+
+  // Build a flat list of ALL commission and install wbs items from supply + commLookup
+  const allWbsRows = useMemo(() => {
+    const rows = [];
+    // Commission scope items from commLookup
+    Object.entries(commLookup).forEach(([wbsCode, data]) => {
+      rows.push({
+        wbs_code: wbsCode,
+        description: data.description || wbsCode,
+        scope: "Commission",
+        section: data.section || (wbsCode.startsWith("4.2") ? "SCADA" : wbsCode.startsWith("4.3") ? "Protection" : wbsCode.startsWith("4.4") ? "Comms" : wbsCode.startsWith("4.1") ? "HV Plant" : "Other"),
+        default_profile: data.profile_id || null,
+      });
+    });
+    return rows.sort((a,b)=>a.wbs_code.localeCompare(b.wbs_code));
+  }, [commLookup]);
+
+  const filteredWbs = allWbsRows.filter(r => {
+    const matchSearch = !wbsSearch || r.wbs_code.toLowerCase().includes(wbsSearch.toLowerCase()) || r.description.toLowerCase().includes(wbsSearch.toLowerCase());
+    const matchScope = wbsScopeFilter === "All" || r.scope === wbsScopeFilter;
+    const matchSection = wbsSectionFilter === "All" || r.section === wbsSectionFilter;
+    return matchSearch && matchScope && matchSection;
+  });
+
+  const wbsSections = ["All", ...Array.from(new Set(allWbsRows.map(r=>r.section))).sort()];
+
   if (!Object.keys(profiles).length) return (
     <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Loading scaling profiles…</div>
   );
@@ -3976,14 +4619,143 @@ function ScalingEditor({ managerMode, onUnlock }) {
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
-        <span className="text-xs text-gray-500">{Object.keys(profiles).length} profiles · Changes apply immediately to commissioning calculations</span>
+        <div className="flex border border-gray-200 rounded overflow-hidden">
+          {[{id:"tiers",label:"📊 Scale Profiles & Tiers"},{id:"assign",label:"🔗 WBS Assignment"}].map(t=>(
+            <button key={t.id} onClick={()=>setScaleTab(t.id)}
+              className={`text-xs px-3 py-1.5 font-semibold transition-colors ${scaleTab===t.id?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{t.label}</button>
+          ))}
+        </div>
+        <span className="text-xs text-gray-500">{Object.keys(profiles).length} profiles · {allWbsRows.length} WBS items</span>
         <div className="flex-1"/>
         {managerMode ? (
-          <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5">🔓 Manager Mode — edit tiers below</span>
+          <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5">🔓 Manager Mode — edit enabled</span>
         ) : (
           <button onClick={onUnlock} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded flex items-center gap-1.5">🔒 Manager Mode</button>
         )}
       </div>
+
+      {/* ── WBS ASSIGNMENT TAB ── */}
+      {scaleTab === "assign" && (
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="max-w-5xl mx-auto">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-800 mb-4">
+              ⚠️ Overrides here change the <strong>default profile</strong> for all future estimates. Per-investment scale overrides are set in the estimate entry screen (requires manager unlock on that estimate).
+            </div>
+            <div className="flex items-center gap-2 mb-3">
+              <input value={wbsSearch} onChange={e=>setWbsSearch(e.target.value)}
+                placeholder="Search WBS code or description…"
+                className="border border-gray-300 rounded px-2 py-1.5 text-xs flex-1 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+              <select value={wbsScopeFilter} onChange={e=>setWbsScopeFilter(e.target.value)}
+                className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none">
+                {["All","Commission"].map(s=><option key={s}>{s}</option>)}
+              </select>
+              <select value={wbsSectionFilter} onChange={e=>setWbsSectionFilter(e.target.value)}
+                className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none">
+                {wbsSections.map(s=><option key={s}>{s}</option>)}
+              </select>
+              {(wbsSearch||wbsScopeFilter!=="All"||wbsSectionFilter!=="All") && (
+                <button onClick={()=>{setWbsSearch("");setWbsScopeFilter("All");setWbsSectionFilter("All");}} className="text-xs text-gray-400 hover:text-gray-600">✕ Clear</button>
+              )}
+            </div>
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 border-b sticky top-0">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">WBS code</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Description</th>
+                    <th className="px-3 py-2 font-semibold text-gray-600 text-center">Scope</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Default profile</th>
+                    <th className="text-left px-3 py-2 font-semibold text-gray-600">Override profile</th>
+                    <th className="px-3 py-2 font-semibold text-gray-600 text-center">Active</th>
+                    {managerMode && <th className="px-3 py-2 w-20"/>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredWbs.length === 0 ? (
+                    <tr><td colSpan={managerMode?7:6} className="px-3 py-6 text-center text-gray-400">No matching WBS items</td></tr>
+                  ) : filteredWbs.map((r,i) => {
+                    const ovrd = wbsProfileOverrides[r.wbs_code];
+                    const activeProfile = ovrd !== undefined ? (ovrd === "none" ? null : ovrd) : r.default_profile;
+                    const hasOverride = ovrd !== undefined;
+                    return (
+                      <tr key={r.wbs_code} className={`border-b ${i%2===0?"":"bg-gray-50/50"} ${hasOverride?"border-l-2 border-l-amber-400":""}`}>
+                        <td className="px-3 py-2 font-mono text-blue-700">{r.wbs_code}</td>
+                        <td className="px-3 py-2 text-gray-700 max-w-[240px] truncate">{r.description}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">{r.scope}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {r.default_profile ? (
+                            <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs font-medium">{r.default_profile}</span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full text-xs">None</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {managerMode ? (
+                            <select
+                              value={ovrd !== undefined ? ovrd : "__default__"}
+                              onChange={e => {
+                                const v = e.target.value;
+                                if (v === "__default__") {
+                                  const next = {...wbsProfileOverrides};
+                                  delete next[r.wbs_code];
+                                  setWbsProfileOverrides(next);
+                                  localStorage.setItem("iet_wbs_profile_overrides", JSON.stringify(next));
+                                } else {
+                                  setWbsOverride(r.wbs_code, v);
+                                }
+                              }}
+                              className="text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+                              <option value="__default__">— use default —</option>
+                              <option value="none">None (no scaling)</option>
+                              {Object.entries(profiles).map(([pid,p])=>(
+                                <option key={pid} value={pid}>{pid} — {p.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            hasOverride ? (
+                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full text-xs font-medium">
+                                {ovrd === "none" ? "None (overridden)" : ovrd}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 text-xs italic">— use default —</span>
+                            )
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {activeProfile ? (
+                            <span className="bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full text-xs font-semibold">{activeProfile}</span>
+                          ) : (
+                            <span className="bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full text-xs">No scaling</span>
+                          )}
+                        </td>
+                        {managerMode && (
+                          <td className="px-3 py-2 text-center">
+                            {hasOverride && (
+                              <button onClick={()=>{
+                                const next = {...wbsProfileOverrides};
+                                delete next[r.wbs_code];
+                                setWbsProfileOverrides(next);
+                                localStorage.setItem("iet_wbs_profile_overrides", JSON.stringify(next));
+                              }} className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded">
+                                Reset
+                              </button>
+                            )}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-xs text-gray-400 mt-2">{filteredWbs.length} items · {Object.keys(wbsProfileOverrides).length} overrides active (highlighted in amber)</div>
+          </div>
+        </div>
+      )}
+      {/* ── TIERS TAB ── */}
+      {scaleTab === "tiers" && (
       <div className="flex-1 overflow-y-auto p-4">
         <div className="max-w-5xl mx-auto space-y-4">
           {Object.entries(profiles).map(([profileId, profile])=>(
@@ -4053,6 +4825,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }
