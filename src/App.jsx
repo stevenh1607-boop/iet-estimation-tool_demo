@@ -19,16 +19,99 @@ const DataCtx = createContext({ wbs:[], rates:[], supply:[], equipment:[], equip
 //     SCADA and Comms equipment costs roll into this row — NOT separate named lines.
 //   - Materials (LLT): one row per PCE item, Spend Name always "Materials (LLT)",
 //     no item description (matches original macro Spend_Template blank LLT rows).
-function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup) {
-  const isComm = inv.type === "Commercially Funded";
+// ── WBS GROUP LABELS — exact text from Copperleaf Spend_Template ─────────────
+const WBS_GROUP_LABELS = {
+  "1":     "1 - PLANNING",
+  "1.1":   "1.1 - Major Network Connections (Commercial)",
+  "1.1.1": "1.1.1 - Commercial",
+  "1.2":   "1.2 - Network Planning",
+  "1.2.1": "1.2.1 - Network Planning",
+  "1.3":   "1.3 - Network  Development (Investment Development)",
+  "1.3.1": "1.3.1 - Investment Development",
+  "2":     "2 - DESIGN",
+  "2.1":   "2.1 - Zone Substation Design",
+  "2.1.1": "2.1.1 - Zone Substation Design",
+  "2.2":   "2.2 - Communications (Comms) Design",
+  "2.2.1": "2.2.1 - Communications (Comms) Design",
+  "2.3":   "2.3 - Subtransmission Mains Design",
+  "2.3.1": "2.3.1 - Subtransmission Mains Design",
+  "2.4":   "2.4 - Distribution Mains Design",
+  "2.4.1": "2.4.1 - Distribution Mains Design",
+  "2.5":   "2.5 - Land and Routes Design",
+  "2.5.1": "2.5.1 - Land and Routes Design",
+  "2.6":   "2.6 - Ancillary Design (Engineering Design)",
+  "2.6.1": "2.6.1 - Ancillary Design (Engineering Design)",
+  "3":     "3 - CONSTRUCTION",
+  "3.1":   "3.1 - Zone Substation Construction",
+  "3.1.1": "3.1.1 - Civil Construction",
+  "3.1.2": "3.1.2 - Building Construction",
+  "3.1.3": "3.1.3 - Electrical Construction",
+  "3.1.4": "3.1.4 - ZS Procurement",
+  "3.1.5": "3.1.5 - ZS Disposal",
+  "3.2":   "3.2 - Communications (Comms) Construction",
+  "3.2.1": "3.2.1 - Substations Communications (Comms) Construction",
+  "3.2.2": "3.2.2 - Optical Fibre Cabling/Construction",
+  "3.2.3": "3.2.3 - Comms Procurement",
+  "3.3":   "3.3 - Subtransmission Mains (SM) Construction",
+  "3.3.1": "3.3.1 - SM Construction",
+  "3.3.2": "3.3.2 - SM Procurement",
+  "3.3.3": "3.3.3 - SM Disposal (Placeholder Only)",
+  "3.4":   "3.4 - Distribution Mains Construction (Placeholder Only)",
+  "3.4.1": "3.4.1 - TBD (Placeholder Only)",
+  "3.4.2": "3.4.2 - DM Procurement (Placeholder Only)",
+  "3.4.3": "3.4.3 - DM Disposal (Placeholder Only)",
+  "3.5":   "3.5 - Ancillary Construction",
+  "3.5.1": "3.5.1 - Ancillary Construction",
+  "4":     "4 - COMMISSIONING",
+  "4.1":   "4.1 - EE's Commissioning",
+  "4.1.1": "4.1.1 - Commissioning of Zone Substation Civil Construction",
+  "4.1.2": "4.1.2 - Commissioning of Zone Substation Electrical Construction",
+  "4.1.3": "4.1.3 - Commissioning of  Communication (Comms) Construction: Comms Systems & Accessories (Substations)",
+  "4.1.4": "4.1.4 - Commissioning of Communication (Comms) Construction: Optical Fibre Cabling/Construction",
+  "4.1.5": "4.1.5 - Commissioning of  Subtransmission Mains (SM) Construction",
+  "4.1.6": "4.1.6 - Commissioning of Ancillary Construction",
+  "5":     "5 - MONITORING & CONTROL",
+  "5.1":   "5.1 - Monitoring & Control - General",
+  "5.1.1": "5.1.1 - Project Management",
+  "5.1.2": "5.1.2 - Project Management Procurement",
+  "5.2":   "5.2 - Project Close-Out",
+  "5.2.1": "5.2.1 - Project Close-Out",
+};
 
-  // ── Project timeline ──────────────────────────────────────────
-  const planStart  = parseInt(inv.planStart||1),  planDur   = parseInt(inv.planDur||4);
-  const desStart   = parseInt(inv.designStart||1), desDur    = parseInt(inv.designDur||9);
-  const conStart   = parseInt(inv.constrStart||6), conDur    = parseInt(inv.constrDur||15);
+// Build backslash-delimited group path with full descriptions
+function buildCLGroupPath(l3code) {
+  const parts = l3code.split(".");
+  const l1 = parts[0];
+  const l2 = parts.slice(0,2).join(".");
+  const l1label = WBS_GROUP_LABELS[l1] || l1;
+  const l2label = WBS_GROUP_LABELS[l2] || l2;
+  const l3label = WBS_GROUP_LABELS[l3code] || l3code;
+  return `${l1label}\\${l2label}\\${l3label}`;
+}
+
+// Generate Copperleaf-format XLSX (matches Spend_Template exactly)
+// Returns a Blob for download — uses SheetJS (xlsx) loaded at runtime
+async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup) {
+  // Dynamically load SheetJS if not already present
+  if (!window.XLSX) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+      s.onload = resolve; s.onerror = reject;
+      document.head.appendChild(s);
+    });
+  }
+  const XL = window.XLSX;
+
+  const isComm = inv.type === "Commercially Funded";
+  const ACCT   = "001000"; // always 001000 per template
+
+  // ── Project timeline ─────────────────────────────────────────
+  const planStart = parseInt(inv.planStart||1),  planDur  = parseInt(inv.planDur||4);
+  const desStart  = parseInt(inv.designStart||1), desDur   = parseInt(inv.designDur||9);
+  const conStart  = parseInt(inv.constrStart||6), conDur   = parseInt(inv.constrDur||15);
   const totalMonths = Math.max(planStart+planDur, desStart+desDur, conStart+conDur) - 1;
 
-  // Phase → active months (1-based)
   const phaseMonths = {
     "1": Array.from({length:planDur}, (_,i)=>planStart+i),
     "2": Array.from({length:desDur},  (_,i)=>desStart+i),
@@ -37,17 +120,19 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
     "5": [conStart+conDur-1, conStart+conDur],
   };
 
-  const [startMon, startYr] = [inv.startMonth||"Jul", parseInt(inv.startYear||2025)];
   const MON_IDX = {Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12};
-  const startMonNum = MON_IDX[startMon] || 7;
-  const colDate = (monthNum) => {
-    const totalMonOffset = startMonNum - 1 + monthNum - 1;
-    const yr = startYr + Math.floor(totalMonOffset / 12);
-    const mo = (totalMonOffset % 12) + 1;
-    return `${yr}-${String(mo).padStart(2,"0")}-01`;
+  const startMonNum = MON_IDX[inv.startMonth||"Jul"] || 7;
+  const startYr = parseInt(inv.startYear||2025);
+
+  // Returns a JS Date for the given project month number (1-based)
+  const monthDate = (monthNum) => {
+    const totalOffset = startMonNum - 1 + monthNum - 1;
+    const yr = startYr + Math.floor(totalOffset / 12);
+    const mo = (totalOffset % 12) + 1;
+    return new Date(yr, mo - 1, 1); // month is 0-based in JS Date
   };
 
-  // ── Escalation factors ───────────────────────────────────────
+  // ── Escalation ───────────────────────────────────────────────
   const escFactor = (phaseKey, cat) => {
     if (!escRates) return 0;
     const ratesArr = Object.values(escRates[cat].rates).map(r=>r/100);
@@ -56,27 +141,103 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
     return months.reduce((s,m) => s + escalationIndex(m, ratesArr), 0) / months.length;
   };
 
-  // ── Resource lookups ────────────────────────────────────────
-  const getResCode     = (n) => resourceCodes[n]?.resource_code || "GMAT";
-  const getAcctCode    = (n) => { const rc = resourceCodes[n]; if (!rc) return "001001"; return isComm ? rc.account_code_external : rc.account_code_internal; };
+  // ── Resource helpers ─────────────────────────────────────────
+  const getResCode      = (n) => resourceCodes[n]?.resource_code || "GMAT";
   const getCurrencyType = (n) => resourceCodes[n]?.currency_type || "Dollar";
+  const getLabourType   = (n) => resourceCodes[n]?.labour_type   || "";
+  const getEquipSource  = (wbs) => (equipLookup?.[wbs])?.source || "PCE";
 
-  // ── Equipment source classification ─────────────────────────
-  // SCADA / Comms → aggregate into Materials (Non-LLT) row
-  // PCE / unknown  → individual Materials (LLT) row, no item name
-  const getEquipSource = (wbs_code) => (equipLookup ? equipLookup[wbs_code] : null)?.source || "PCE";
+  // ── Rows accumulator ─────────────────────────────────────────
+  // Each row is an array of cell values (index 0-16 = static cols, 17+ = month dates)
+  // Date cells will be actual JS Date objects so SheetJS serialises them as Excel dates
+  const monthDates = Array.from({length:totalMonths}, (_,i) => monthDate(i+1));
 
-  // ── Group entered lines by L3 ───────────────────────────────
+  // Header row: 17 static labels + Date objects for each month
+  const STATIC_HDRS = [
+    "Group Path","Group Description","Id","Row Type","Currency / Unit",
+    "Spend Name","Currency / Unit Type","Is Unshiftable","Account Code",
+    "Resource Code","Labour Type",
+    "LLT Description","LLT Item","LLT Quantity","Make / Model","Stock/Contract number","Voltage"
+  ];
+  const headerRow = [...STATIC_HDRS, ...monthDates];
+  const rows = [headerRow];
+
+  // ── Helper: write a GROUP row ─────────────────────────────────
+  const writtenL1 = new Set(), writtenL2 = new Set(), writtenL3 = new Set();
+
+  const writeGroup = (code) => {
+    const label = WBS_GROUP_LABELS[code] || code;
+    const parts = code.split(".");
+    const depth = parts.length;
+    const levelStr = depth === 1 ? "WBS Level 1" : depth === 2 ? "WBS Level 2" : "WBS Level 3";
+    // Build the full backslash path
+    let fullPath = label;
+    if (depth >= 2) {
+      const l1 = WBS_GROUP_LABELS[parts[0]] || parts[0];
+      const l2 = WBS_GROUP_LABELS[parts.slice(0,2).join(".")] || parts.slice(0,2).join(".");
+      fullPath = depth === 2 ? `${l1}\\${l2}` : `${l1}\\${l2}\\${label}`;
+    }
+    const row = new Array(17 + totalMonths).fill("");
+    row[0] = fullPath;   // Group Path
+    row[1] = levelStr;   // Group Description
+    row[2] = code;       // Id
+    row[3] = "Group";    // Row Type
+    // col 4 (Currency/Unit) blank for Group
+    row[5] = label;      // Spend Name = last segment label
+    rows.push(row);
+  };
+
+  const ensureGroups = (l3code) => {
+    const parts = l3code.split(".");
+    const l1 = parts[0];
+    const l2 = parts.slice(0,2).join(".");
+    if (!writtenL1.has(l1)) { writtenL1.add(l1); writeGroup(l1); }
+    if (!writtenL2.has(l2)) { writtenL2.add(l2); writeGroup(l2); }
+    if (!writtenL3.has(l3code)) { writtenL3.add(l3code); writeGroup(l3code); }
+  };
+
+  // ── Helper: write a SPEND row ─────────────────────────────────
+  const writeSpend = (l3code, spendName, currType, resCode, labourType, perMonthByMonthIdx, metaCols={}) => {
+    const row = new Array(17 + totalMonths).fill("");
+    row[0] = buildCLGroupPath(l3code);
+    row[1] = "WBS Level 3";  // Spend rows show L3 context
+    row[2] = l3code;
+    row[3] = "Spend";
+    row[4] = "Unit";
+    row[5] = spendName;
+    row[6] = currType;
+    row[7] = 0;
+    row[8] = ACCT;
+    row[9] = resCode;
+    row[10] = labourType;
+    // Optional LLT/material metadata cols 11-16
+    if (metaCols.lltDesc)     row[11] = metaCols.lltDesc;
+    if (metaCols.lltItem)     row[12] = metaCols.lltItem;
+    if (metaCols.lltQty)      row[13] = metaCols.lltQty;
+    if (metaCols.makeModel)   row[14] = metaCols.makeModel;
+    if (metaCols.contractNo)  row[15] = metaCols.contractNo;
+    if (metaCols.voltage)     row[16] = metaCols.voltage;
+    // Spread spend across month columns
+    perMonthByMonthIdx.forEach(([mIdx, val]) => {
+      // mIdx is 1-based project month; col index = 17 + (mIdx-1)
+      const ci = 17 + (mIdx - 1);
+      if (ci < row.length) row[ci] = val;
+    });
+    rows.push(row);
+  };
+
+  // ── Group entered supply items by L3 ─────────────────────────
   const entered = supply.filter(s => parseFloat(lines[s.wbs_code]?.qty||"0") > 0);
 
   const byL3 = {};
   entered.forEach(item => {
     const parts = item.wbs_code.split(".");
-    const l1 = parts[0], l2 = parts.slice(0,2).join("."), l3 = parts.slice(0,3).join(".");
-    if (!byL3[l3]) byL3[l3] = { l1, l2, l3, phase: l1, items:[] };
+    const l1 = parts[0], l3 = parts.slice(0,3).join(".");
+    if (!byL3[l3]) byL3[l3] = { l1, items:[] };
     byL3[l3].items.push(item);
   });
 
+  // ── COMMISSION aggregation by L3 ─────────────────────────────
   const commByL3 = {};
   entered.forEach(item => {
     const cw = item.commission_wbs;
@@ -87,73 +248,47 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
     commByL3[l3][cw] = (commByL3[l3][cw]||0) + qty;
   });
 
-  // ── CSV headers — matches Spend_Template columns exactly ────
-  const monthCols = Array.from({length:totalMonths}, (_,i) => colDate(i+1));
-  const staticHeaders = [
-    "Group Path","Group Description","Id","Row Type","Currency / Unit",
-    "Spend Name","Currency / Unit Type","Is Unshiftable","Account Code",
-    "Resource Code","Labour Type",
-    "LLT Description","LLT Item","LLT Quantity","Make / Model","Stock/Contract number","Voltage"
-  ];
-  const allHeaders = [...staticHeaders, ...monthCols];
-  const csvRows = [allHeaders];
-
-  // ── Helper: backslash-delimited group path ───────────────────
-  const buildGroupPath = (l1, l2, l3) => `${l1}\\${l2}\\${l3}`;
-
-  const writtenL1 = new Set(), writtenL2 = new Set(), writtenL3 = new Set();
-
-  const writeGroupRow = (code, label) => {
-    const row = Array(allHeaders.length).fill("");
-    row[0] = label; // Group Path
-    row[1] = label; // Group Description
-    row[2] = code;  // Id
-    row[3] = "Group";
-    // row[5] (Spend Name) intentionally blank for GROUP rows — matches Spend_Template
-    return row;
-  };
-
-  // ── Supply items: Phases 1–3, 5 ─────────────────────────────
-  Object.entries(byL3).sort().forEach(([l3, group]) => {
-    const { l1, l2, phase, items } = group;
+  // ── Write supply/install/design phases (1, 2, 3, 5) ──────────
+  Object.entries(byL3).sort().forEach(([l3, {l1, items}]) => {
+    const phase = l1;
     const phMonths = phaseMonths[phase] || [];
-    const acct = isComm ? "001000" : "001001";
+    if (!phMonths.length) return;
 
-    // GROUP rows (L1, L2, L3)
-    if (!writtenL1.has(l1)) { writtenL1.add(l1); csvRows.push(writeGroupRow(l1, `${l1} - Phase ${l1}`)); }
-    if (!writtenL2.has(l2)) { writtenL2.add(l2); csvRows.push(writeGroupRow(l2, `${l2} - Group`)); }
-    if (!writtenL3.has(l3)) { writtenL3.add(l3); csvRows.push(writeGroupRow(l3, `${l3} - Group`)); }
+    ensureGroups(l3);
 
-    // Labour / Contractor SPEND rows — one per resource type, aggregated across all items in L3
-    const costByResource = {};
+    // Aggregate labour/contractor by resource name
+    const costByRes = {};
     items.forEach(item => {
       const ln = lines[item.wbs_code] || {};
-      const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial, ln.resourceOvrd, null, 0);
+      const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd,
+                         ln.contrRate, ln.plant, ln.mats, isCommercial, ln.resourceOvrd, null, 0);
       const isContr = (ln.delivery||item.delivery_method||"") === "Contractor Delivered";
       const res = isContr ? "Contractor" : (item.resource_main || "ZS Electrical Technician");
-      if (!costByResource[res]) costByResource[res] = {hours:0, dollars:0};
-      if (getCurrencyType(res) === "Hour") costByResource[res].hours  += c.installHrs || 0;
-      else                                  costByResource[res].dollars += c.contrCost  || 0;
+      if (!costByRes[res]) costByRes[res] = {hours:0, dollars:0};
+      if (getCurrencyType(res) === "Hour") costByRes[res].hours  += c.installHrs || 0;
+      else                                  costByRes[res].dollars += c.contrCost  || 0;
+      // WAFHA days
+      if (isWAFHAItem(item) && (c.installHrs||0) > 0) {
+        const wDays = parseFloat(ln.qty||"0") * parseFloat(ln.factor||"1");
+        if (!costByRes["Work Away From Home"]) costByRes["Work Away From Home"] = {hours:0, dollars:0};
+        costByRes["Work Away From Home"].hours += wDays;
+      }
     });
 
-    Object.entries(costByResource).forEach(([resName, costs]) => {
+    Object.entries(costByRes).forEach(([resName, costs]) => {
       const currType = getCurrencyType(resName);
-      const totalVal = currType === "Hour" ? costs.hours : costs.dollars;
+      const isWAFHA  = resName === "Work Away From Home";
+      const totalVal = isWAFHA ? costs.hours : (currType === "Hour" ? costs.hours : costs.dollars);
       if (totalVal <= 0) return;
-      const ef = escFactor(phase, currType !== "Hour" ? "contractors" : "internal_ee");
-      const perMonth = phMonths.length > 0 ? totalVal*(1+ef) / phMonths.length : 0;
-      const row = Array(allHeaders.length).fill("");
-      row[0]=buildGroupPath(l1,l2,l3); row[1]=`${l3} - Group`; row[2]=l3;
-      row[3]="Spend"; row[4]="Unit"; row[5]=resName; row[6]=currType;
-      row[7]="0"; row[8]=getAcctCode(resName); row[9]=getResCode(resName);
-      row[10]=resourceCodes[resName]?.labour_type||"";
-      phMonths.forEach(m=>{ const ci=staticHeaders.length+(m-1); if(ci<row.length) row[ci]=perMonth.toFixed(2); });
-      csvRows.push(row);
+      const cat = currType !== "Hour" ? "contractors" : "internal_ee";
+      const ef  = escFactor(phase, cat);
+      const perMonth = (totalVal * (1+ef)) / phMonths.length;
+      const monthSpend = phMonths.map(m => [m, parseFloat(perMonth.toFixed(6))]);
+      writeSpend(l3, resName, isWAFHA ? "Day" : currType,
+                 getResCode(resName), getLabourType(resName), monthSpend);
     });
 
-    // Materials rows — following original macro behaviour:
-    //   SCADA + Comms equipment → aggregate into ONE Materials (Non-LLT) Dollar row
-    //   PCE items → each gets its own Materials (LLT) row, Spend Name = "Materials (LLT)", no description
+    // Material rows
     let nonLLTTotal = 0;
     const lltRows = [];
 
@@ -169,107 +304,117 @@ function generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, esc
       if (source === "SCADA" || source === "Comms") {
         nonLLTTotal += totalMat;
       } else {
-        // Store total cost plus equipment metadata for the LLT row
-        const eq = equipLookup ? equipLookup[item.wbs_code] : null;
+        const eq = equipLookup?.[item.wbs_code] || null;
         lltRows.push({
-          totalMat,
-          desc: (eq?.description || item.description || "").substring(0, 100),
-          category: eq?.category || "",
-          qty: String(effQty),
-          makeModel: [eq?.make, eq?.model].filter(Boolean).join(" "),
+          totalMat, effQty,
+          desc:       (eq?.description || item.description || "").substring(0, 120),
+          category:   eq?.category    || "",
+          makeModel:  [eq?.make, eq?.model].filter(Boolean).join(" / "),
           contractNo: eq?.contract_no || "",
-          voltage: eq?.voltage || eq?.family || ""
+          voltage:    eq?.voltage || eq?.family || "",
         });
       }
     });
 
-    // Single aggregated Non-LLT row (SCADA + Comms rolled in)
     if (nonLLTTotal > 0) {
-      const perMonth = phMonths.length > 0 ? nonLLTTotal / phMonths.length : 0;
-      const row = Array(allHeaders.length).fill("");
-      row[0]=buildGroupPath(l1,l2,l3); row[1]=`${l3} - Group`; row[2]=l3;
-      row[3]="Spend"; row[4]="Unit"; row[5]="Materials (Non-LLT)"; row[6]="Dollar";
-      row[7]="0"; row[8]=acct; row[9]="GMAT"; row[10]="";
-      phMonths.forEach(m=>{ const ci=staticHeaders.length+(m-1); if(ci<row.length) row[ci]=perMonth.toFixed(2); });
-      csvRows.push(row);
+      const perMonth = nonLLTTotal / phMonths.length;
+      writeSpend(l3, "Materials (Non-LLT)", "Dollar", "GMAT", "",
+                 phMonths.map(m=>[m, parseFloat(perMonth.toFixed(6))]));
     }
 
-    // One Materials (LLT) row per PCE item — Spend Name is "Materials (LLT)", metadata in cols 11-16
-    lltRows.forEach(({ totalMat, desc, category, qty, makeModel, contractNo, voltage }) => {
-      const perMonth = phMonths.length > 0 ? totalMat / phMonths.length : 0;
-      const row = Array(allHeaders.length).fill("");
-      row[0]=buildGroupPath(l1,l2,l3); row[1]=`${l3} - Group`; row[2]=l3;
-      row[3]="Spend"; row[4]="Unit"; row[5]="Materials (LLT)"; row[6]="Dollar";
-      row[7]="0"; row[8]=acct; row[9]="GMAT"; row[10]="";
-      row[11]=desc; row[12]=category; row[13]=qty;
-      row[14]=makeModel; row[15]=contractNo; row[16]=voltage;
-      phMonths.forEach(m=>{ const ci=staticHeaders.length+(m-1); if(ci<row.length) row[ci]=perMonth.toFixed(2); });
-      csvRows.push(row);
+    lltRows.forEach(({totalMat, effQty, desc, category, makeModel, contractNo, voltage}) => {
+      const perMonth = totalMat / phMonths.length;
+      writeSpend(l3, "Materials (LLT)", "Dollar", "LLMAT", "",
+                 phMonths.map(m=>[m, parseFloat(perMonth.toFixed(6))]),
+                 { lltDesc:desc, lltItem:category, lltQty:String(effQty),
+                   makeModel, contractNo, voltage });
     });
   });
 
-    // Commission rows (Phase 4)
+  // ── Commissioning (Phase 4) ───────────────────────────────────
   Object.entries(commByL3).sort().forEach(([l3, commWbsMap]) => {
-    const l1 = "4", l2 = l3.split(".").slice(0,2).join(".");
     const phMonths = phaseMonths["4"] || [];
+    if (!phMonths.length) return;
 
-    if (!writtenL1.has(l1)) { writtenL1.add(l1); csvRows.push(writeGroupRow(l1,"4 - Commissioning",1)); }
-    if (!writtenL2.has(l2)) { writtenL2.add(l2); csvRows.push(writeGroupRow(l2,`${l2} - Group`,2)); }
-    if (!writtenL3.has(l3)) { writtenL3.add(l3); csvRows.push(writeGroupRow(l3,`${l3} - Group`,3)); }
+    ensureGroups(l3);
 
-    let totalHrs = 0;
-    let commResName = "ZS Specialist Technician";
+    // Aggregate hours per resource type in this L3
+    const hrsByRes = {};
     Object.entries(commWbsMap).forEach(([cw, qty]) => {
       const cd = commLookup[cw];
       if (!cd) return;
-      const scale  = getScaleFactor(commProfiles, cd.profile_id, qty);
-      const ovrd   = lines[`comm_ovrd_${cw}`]?.qty;
-      const hrs    = (ovrd !== undefined && ovrd !== "") ? (parseFloat(ovrd)||0) : qty*(cd.hrs_per_unit||0)*scale;
-      totalHrs += hrs;
-      if (cd.resource_type) commResName = cd.resource_type;
+      const scale = getScaleFactor(commProfiles, cd.profile_id, qty);
+      const ovrd  = lines[`comm_ovrd_${cw}`]?.qty;
+      const hrs   = (ovrd !== undefined && ovrd !== "") ? (parseFloat(ovrd)||0) : qty*(cd.hrs_per_unit||0)*scale;
+      if (hrs <= 0) return;
+      const res = cd.resource_type || "ZS Specialist Technician";
+      hrsByRes[res] = (hrsByRes[res]||0) + hrs;
     });
 
-    if (totalHrs <= 0) return;
-    const ef = escFactor("4","internal_ee");
-    const totalEscalated = totalHrs * (1+ef);
-    const perMonth = phMonths.length > 0 ? totalEscalated / phMonths.length : 0;
-
-    const row = Array(allHeaders.length).fill("");
-    row[0] = buildGroupPath(l1, l2, l3);
-    row[1] = `${l3} - Commissioning`;
-    row[2] = l3; row[3] = "Spend"; row[4] = "Unit";
-    row[5] = commResName; row[6] = "Hour"; row[7] = "0";
-    row[8] = isComm ? "001000" : "001001";
-    row[9] = getResCode(commResName);
-    row[10] = resourceCodes[commResName]?.labour_type || "";
-    phMonths.forEach(m => {
-      const colIdx = staticHeaders.length + (m-1);
-      if (colIdx < row.length) row[colIdx] = perMonth.toFixed(2);
+    Object.entries(hrsByRes).forEach(([resName, totalHrs]) => {
+      if (totalHrs <= 0) return;
+      const ef = escFactor("4", "internal_ee");
+      const perMonth = (totalHrs * (1+ef)) / phMonths.length;
+      writeSpend(l3, resName, "Hour", getResCode(resName), getLabourType(resName),
+                 phMonths.map(m=>[m, parseFloat(perMonth.toFixed(6))]));
     });
-    csvRows.push(row);
   });
 
-  // ── Convert to CSV string ────────────────────────────────────
-  const csvContent = csvRows.map(row =>
-    row.map(cell => {
-      const s = String(cell ?? "");
-      return s.includes(",") || s.includes('"') || s.includes("\n")
-        ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(",")
-  ).join("\n");
+  // ── Build workbook ────────────────────────────────────────────
+  const wb = XL.utils.book_new();
 
-  return csvContent;
+  // Convert rows to AOA (array of arrays) for SheetJS
+  // Date values will be formatted as Excel date serials
+  const ws = XL.utils.aoa_to_sheet(rows, { cellDates: true, dateNF: "yyyy-mm-dd" });
+
+  // Set column widths to match template
+  ws["!cols"] = [
+    {wch:80},{wch:20},{wch:12},{wch:10},{wch:12},
+    {wch:60},{wch:18},{wch:14},{wch:14},{wch:20},{wch:14},
+    {wch:80},{wch:24},{wch:12},{wch:30},{wch:22},{wch:10},
+    ...Array(totalMonths).fill({wch:12}),
+  ];
+
+  // Freeze top row
+  ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2" };
+
+  XL.utils.book_append_sheet(wb, ws, "Spend");
+
+  // Summary sheet — matches template metadata
+  const now = new Date();
+  const summaryData = [
+    ["Please do not edit this worksheet. This worksheet contains critical information for forecast import."],
+    ["Investment Name"],
+    ["Investment Code"],
+    ["Alternative"],
+    ["Alternative Start Date", new Date(startYr, startMonNum-1, 1)],
+    ["Export Date", now],
+    ["Export User", inv.estimatedBy || ""],
+    ["Spend Amount", "Inflated"],
+    ["Uninflated Fiscal Year"],
+    ["Resource Display", "Unit"],
+    ["Export spend values as", "Monthly"],
+    ["Include loadings", "Yes"],
+    ["Alternative ID"],
+  ];
+  const ws2 = XL.utils.aoa_to_sheet(summaryData, { cellDates: true });
+  ws2["!cols"] = [{wch:70},{wch:20}];
+  XL.utils.book_append_sheet(wb, ws2, "Summary");
+
+  // Write to Blob
+  const wbout = XL.write(wb, { bookType:"xlsx", type:"array", cellDates:true });
+  return new Blob([wbout], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
-function downloadCSV(content, filename) {
-  const blob = new Blob([content], {type:"text/csv;charset=utf-8;"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement("a");
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
 // Australian FY: July–June. Month 1 = project start = July of start year.
 // Compound monthly escalation index per the ABS-based formula.
 function escalationIndex(monthNum, annualRatesArr) {
@@ -2289,12 +2434,13 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved }
               {lastSaved && <span className="text-xs text-green-600">✓ Saved {lastSaved}</span>}
               <button onClick={onSave} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded font-semibold shadow">💾 Save Investment</button>
               <button onClick={()=>{
-                const csv = generateCopperleafCSV(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup);
                 const suffix = isCommercial ? "ANS_RATES" : "EE_RATES";
-                const filename = `${inv.number||"IET"}_${suffix}_Copperleaf.csv`;
-                downloadCSV(csv, filename);
+                const filename = `${inv.number||"IET"}_${suffix}_Copperleaf.xlsx`;
+                generateCopperleafXLSX(inv, lines, supply, commLookup, commProfiles, escRates, resourceCodes, isCommercial, equipLookup)
+                  .then(blob => downloadBlob(blob, filename))
+                  .catch(err => alert("Export failed: " + err.message));
               }} className="bg-teal-700 hover:bg-teal-600 text-white text-xs px-4 py-2 rounded font-semibold shadow">
-                ☁️ Export Copperleaf CSV
+                ☁️ Export Copperleaf XLSX
               </button>
             </div>
           </div>
