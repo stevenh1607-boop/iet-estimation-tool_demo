@@ -134,7 +134,8 @@
       "resource_type": "ZS Electrical Technician",
       "profile_id": null,
       "profile_name": null,
-      "profile_status": null
+      "profile_status": null,
+      "direct_entry": true
     },
     "4.1.1.01.7.02": {
       "description": "Earthing System - Engineering Commissioning",
