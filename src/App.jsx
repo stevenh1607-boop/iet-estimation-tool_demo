@@ -3036,6 +3036,10 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   const [sortDir,     setSortDir]     = useState("desc");
   const [selected,    setSelected]    = useState(null);
   const [editStatus,  setEditStatus]  = useState(null); // id of investment being status-edited
+  const [deleteModal, setDeleteModal] = useState(null); // { stage:1|2|3, inv:savedRecord }
+  const [deleteRole,  setDeleteRole]  = useState(null); // "Senior Estimator"|"Manager"
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const DELETE_ROLES = ["Senior Estimator", "Lead Estimator", "Manager"];
   const [showCloneModal, setShowCloneModal] = useState(false);
   const [cloneSource,    setCloneSource]    = useState(null);
   const [cloneClass,     setCloneClass]     = useState("Class 4");
@@ -3065,6 +3069,17 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
     setSaved(updated);
     localStorage.setItem("iet_investments", JSON.stringify(updated));
     if (selected?.id===id) setSelected(null);
+  };
+  const startDelete = (s, e) => {
+    if (e) e.stopPropagation();
+    setDeleteModal({ stage:1, inv:s });
+    setDeleteRole(null);
+    setDeleteConfirmText("");
+  };
+  const confirmDelete = () => {
+    if (!deleteModal?.inv) return;
+    del(deleteModal.inv.id);
+    setDeleteModal(null); setDeleteRole(null); setDeleteConfirmText("");
   };
 
   // Clone an investment — creates a new record with a new class, preserving all lines
@@ -3410,8 +3425,8 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                         <div className="flex gap-1 justify-center" onClick={e=>e.stopPropagation()}>
                           <button onClick={()=>onLoad(s)}
                             className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">Open</button>
-                          <button onClick={()=>del(s.id)}
-                            className="text-xs border border-red-200 text-red-400 hover:bg-red-50 px-1.5 py-1 rounded">✕</button>
+                          <button onClick={(e)=>startDelete(s,e)}
+                            className="text-xs border border-red-200 text-red-400 hover:bg-red-50 px-1.5 py-1 rounded" title="Delete investment (requires authorisation)">🗑</button>
                         </div>
                       </td>
                     </tr>
@@ -3543,13 +3558,77 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               <button onClick={()=>exportPDF(selected)}
                 className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-blue-400">📄 Export PDF</button>
               <button className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50">☁️ Copperleaf</button>
-              <button onClick={()=>del(selected.id)}
-                className="border border-red-200 text-red-500 text-xs px-2 py-1.5 rounded hover:bg-red-50">✕</button>
+              <button onClick={(e)=>startDelete(selected,e)}
+                className="border border-red-200 text-red-500 text-xs px-2 py-1.5 rounded hover:bg-red-50 flex items-center gap-1" title="Delete investment">🗑 Delete</button>
             </div>
           </div>
         </div>
       )}
       </div>}{/* end portfolio tab */}
+
+      {/* ── DELETE INVESTMENT MODAL — 3-stage role-locked ── */}
+      {deleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.55)"}}>
+          <div className="bg-white rounded-xl shadow-2xl w-[460px] overflow-hidden">
+            {/* Stage 1: Role selection */}
+            {deleteModal.stage===1 && (
+              <>
+                <div className="bg-red-700 text-white px-5 py-4">
+                  <div className="text-sm font-bold">🔒 Authorisation Required</div>
+                  <div className="text-xs text-red-200 mt-1">Only Senior Estimators, Lead Estimators, or Managers may delete investments.</div>
+                </div>
+                <div className="p-5">
+                  <div className="text-xs text-gray-500 mb-1 font-semibold">Investment to delete</div>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+                    <div className="text-sm font-bold text-gray-800">{deleteModal.inv?.inv?.name||"Unnamed"}</div>
+                    <div className="text-xs text-gray-400 font-mono">{deleteModal.inv?.inv?.number} · {deleteModal.inv?.inv?.estClass} · {deleteModal.inv?.status||"Draft"}</div>
+                  </div>
+                  <div className="text-xs text-gray-600 font-semibold mb-2">Select your role to proceed</div>
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    {DELETE_ROLES.map(r=>(
+                      <button key={r} onClick={()=>setDeleteRole(r)}
+                        className={`text-xs py-2.5 rounded border font-semibold transition-colors ${deleteRole===r?"bg-red-700 text-white border-red-700":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={()=>{setDeleteModal(null);setDeleteRole(null);}} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+                    <button onClick={()=>setDeleteModal(m=>({...m,stage:2}))} disabled={!deleteRole}
+                      className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Continue →</button>
+                  </div>
+                </div>
+              </>
+            )}
+            {/* Stage 2: Warning + type DELETE */}
+            {deleteModal.stage===2 && (
+              <>
+                <div className="bg-red-700 text-white px-5 py-4">
+                  <div className="text-sm font-bold">⚠️ Confirm Permanent Deletion</div>
+                  <div className="text-xs text-red-200 mt-1">Acting as: {deleteRole}</div>
+                </div>
+                <div className="p-5">
+                  <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-xs text-red-800 mb-4">
+                    <div className="font-bold mb-1">This action cannot be undone.</div>
+                    <div>Deleting <strong>{deleteModal.inv?.inv?.name}</strong> will permanently remove all estimate lines, phase breakdowns, and saved data for this investment.</div>
+                  </div>
+                  <div className="text-xs text-gray-600 font-semibold mb-1.5">Type DELETE to confirm</div>
+                  <input autoFocus value={deleteConfirmText} onChange={e=>setDeleteConfirmText(e.target.value)}
+                    placeholder='Type DELETE here'
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-red-400 mb-4"/>
+                  <div className="flex gap-2">
+                    <button onClick={()=>setDeleteModal(m=>({...m,stage:1}))} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">← Back</button>
+                    <button onClick={confirmDelete} disabled={deleteConfirmText!=="DELETE"}
+                      className="flex-1 bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-bold">
+                      🗑 Delete Investment
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── CLONE / PROMOTE MODAL ── */}
       {showCloneModal && cloneSource && (
@@ -5643,9 +5722,18 @@ function WBSManager({ equipSel, setEquipSel }) {
   const [tab,          setTab]         = useState("items");
   const [search,       setSearch]      = useState("");
   const [scopeFilter,  setScopeFilter] = useState("All");
-  const [people,       setPeople]      = useState(SAMPLE_PEOPLE);
+  const [people, setPeople] = useState(()=>{
+    try{
+      const raw=localStorage.getItem("iet_people");
+      return raw?JSON.parse(raw):SAMPLE_PEOPLE;
+    }catch(e){return SAMPLE_PEOPLE;}
+  });
+  const savePeople = (p)=>{ setPeople(p); localStorage.setItem("iet_people",JSON.stringify(p)); };
   const [showAdd,      setShowAdd]     = useState(false);
   const [newP,         setNewP]        = useState({name:"",email:"",role:"Estimator",team:"Zone Substation",canReview:false});
+  const [peopleFilter, setPeopleFilter]= useState("active"); // "all"|"active"|"inactive"
+  const [deletePersonModal, setDeletePersonModal] = useState(null); // person object
+  const [deletePersonStage, setDeletePersonStage] = useState(1);
 
   // ── PIN-LOCKED MANAGER MODE ──
   const MANAGER_PIN = "1607";
@@ -5712,9 +5800,17 @@ function WBSManager({ equipSel, setEquipSel }) {
 
   const addPerson=()=>{
     if(!newP.name.trim()||!newP.email.trim()) return;
-    setPeople(p=>[...p,{id:Date.now(),...newP,active:true}]);
+    const next=[...people,{id:Date.now(),...newP,active:true}];
+    savePeople(next);
     setShowAdd(false);
     setNewP({name:"",email:"",role:"Estimator",team:"Zone Substation",canReview:false});
+  };
+  const togglePersonActive=(id,val)=>{
+    savePeople(people.map(x=>x.id===id?{...x,active:val}:x));
+  };
+  const deletePerson=(id)=>{
+    savePeople(people.filter(x=>x.id!==id));
+    setDeletePersonModal(null); setDeletePersonStage(1);
   };
 
   const equipSelectedCount = Object.values(equipSel).filter(q=>parseFloat(q)>0).length;
@@ -5848,31 +5944,55 @@ function WBSManager({ equipSel, setEquipSel }) {
       {/* People & Roles */}
       {tab==="people"&&(
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Toolbar */}
           <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
             <button onClick={()=>setShowAdd(s=>!s)}
-              className="text-xs bg-green-700 hover:bg-green-600 text-white px-3 py-1.5 rounded font-semibold">
-              {showAdd?"Cancel":"+ Add Person"}
+              className={`text-xs px-3 py-1.5 rounded font-semibold ${showAdd?"bg-gray-200 text-gray-700":"bg-green-700 hover:bg-green-600 text-white"}`}>
+              {showAdd?"✕ Cancel":"+ Add Person"}
             </button>
+            <div className="flex border border-gray-200 rounded overflow-hidden">
+              {[["active","Active"],["inactive","Inactive"],["all","All"]].map(([v,l])=>(
+                <button key={v} onClick={()=>setPeopleFilter(v)}
+                  className={`text-xs px-3 py-1.5 font-semibold transition-colors ${peopleFilter===v?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{l}</button>
+              ))}
+            </div>
+            <span className="text-xs text-gray-400">{people.filter(p=>p.active).length} active · {people.filter(p=>!p.active).length} inactive</span>
+            <div className="flex-1"/>
+            {managerMode?(
+              <span className="text-xs bg-orange-100 text-orange-700 px-3 py-1.5 rounded font-semibold">🔓 Manager Mode — delete enabled</span>
+            ):(
+              <button onClick={()=>setShowPinModal(true)} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded flex items-center gap-1.5">🔒 Manager Mode (to delete)</button>
+            )}
           </div>
+
+          {/* Add person form */}
           {showAdd&&(
             <div className="bg-green-50 border-b border-green-200 px-4 py-3 flex-shrink-0">
               <div className="grid grid-cols-5 gap-2 items-end">
-                <div><label className="text-xs text-gray-500 block mb-0.5">Full Name *</label>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-0.5">Full Name *</label>
                   <input value={newP.name} onChange={e=>setNewP(p=>({...p,name:e.target.value}))}
-                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/></div>
-                <div><label className="text-xs text-gray-500 block mb-0.5">Email *</label>
+                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-0.5">Email *</label>
                   <input value={newP.email} onChange={e=>setNewP(p=>({...p,email:e.target.value}))}
-                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/></div>
-                <div><label className="text-xs text-gray-500 block mb-0.5">Role</label>
+                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400"/>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-0.5">Role</label>
                   <select value={newP.role} onChange={e=>setNewP(p=>({...p,role:e.target.value}))}
                     className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-400">
                     {["Estimator","Senior Estimator","Lead Estimator","Project Manager"].map(r=><option key={r}>{r}</option>)}
-                  </select></div>
-                <div><label className="text-xs text-gray-500 block mb-0.5">Team</label>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-0.5">Team</label>
                   <select value={newP.team} onChange={e=>setNewP(p=>({...p,team:e.target.value}))}
                     className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-green-400">
                     {["Zone Substation","Subtransmission","Communications","Commissioning","Civil & Earthing"].map(t=><option key={t}>{t}</option>)}
-                  </select></div>
+                  </select>
+                </div>
                 <div className="flex items-end gap-2">
                   <label className="flex items-center gap-1 text-xs text-gray-600 mb-1 cursor-pointer">
                     <input type="checkbox" checked={newP.canReview} onChange={e=>setNewP(p=>({...p,canReview:e.target.checked}))}/> Can Review
@@ -5883,33 +6003,114 @@ function WBSManager({ equipSel, setEquipSel }) {
               </div>
             </div>
           )}
+
+          {/* People table */}
           <div className="flex-1 overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 border-b sticky top-0">
-                <tr>{["Name","Email","Role","Team","Reviewer","Status",""].map(h=>(
-                  <th key={h} className="text-left px-3 py-2 font-semibold text-gray-500">{h}</th>
-                ))}</tr>
+                <tr>
+                  {["Name","Email","Role","Team","Can Review","Status","Actions"].map(h=>(
+                    <th key={h} className="text-left px-3 py-2 font-semibold text-gray-500">{h}</th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
-                {people.map(p=>(
-                  <tr key={p.id} className={`border-b ${p.active?"hover:bg-gray-50":"opacity-50 bg-gray-50"}`}>
-                    <td className="px-3 py-2 font-semibold text-gray-800">{p.name}</td>
-                    <td className="px-3 py-2 text-gray-500">{p.email}</td>
-                    <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${WBS_ROLE_STYLES[p.role]||"bg-gray-100 text-gray-500"}`}>{p.role}</span></td>
-                    <td className="px-3 py-2 text-gray-600">{p.team}</td>
-                    <td className="px-3 py-2 text-center">{p.canReview?<span className="text-green-600 font-bold">✓</span>:<span className="text-gray-300">–</span>}</td>
-                    <td className="px-3 py-2"><span className={`px-1.5 py-0.5 rounded text-xs font-medium ${p.active?"bg-green-100 text-green-700":"bg-red-100 text-red-600"}`}>{p.active?"Active":"Inactive"}</span></td>
+                {people
+                  .filter(p=>peopleFilter==="all"||(peopleFilter==="active"&&p.active)||(peopleFilter==="inactive"&&!p.active))
+                  .map(p=>(
+                  <tr key={p.id} className={`border-b transition-colors ${p.active?"hover:bg-gray-50":"opacity-60 bg-gray-50 hover:bg-gray-100"}`}>
                     <td className="px-3 py-2">
-                      {p.active
-                        ?<button onClick={()=>setPeople(prev=>prev.map(x=>x.id===p.id?{...x,active:false}:x))} className="text-xs text-red-500 hover:text-red-700">Deactivate</button>
-                        :<button onClick={()=>setPeople(prev=>prev.map(x=>x.id===p.id?{...x,active:true}:x))} className="text-xs text-green-600 hover:text-green-800">Reactivate</button>
-                      }
+                      <div className="font-semibold text-gray-800">{p.name}</div>
+                      {!p.active&&<div className="text-xs text-gray-400 italic">Inactive — not available for selection</div>}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{p.email}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${WBS_ROLE_STYLES[p.role]||"bg-gray-100 text-gray-500"}`}>{p.role}</span>
+                    </td>
+                    <td className="px-3 py-2 text-gray-600">{p.team}</td>
+                    <td className="px-3 py-2 text-center">
+                      {p.canReview?<span className="text-green-600 font-bold text-sm">✓</span>:<span className="text-gray-300">–</span>}
+                    </td>
+                    <td className="px-3 py-2">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${p.active?"bg-green-100 text-green-700":"bg-gray-100 text-gray-500"}`}>
+                        {p.active?"Active":"Inactive"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        {p.active?(
+                          <button onClick={()=>togglePersonActive(p.id,false)}
+                            className="text-xs text-amber-600 hover:text-amber-800 border border-amber-200 hover:border-amber-400 px-2 py-0.5 rounded">
+                            Make Inactive
+                          </button>
+                        ):(
+                          <button onClick={()=>togglePersonActive(p.id,true)}
+                            className="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 px-2 py-0.5 rounded">
+                            Reactivate
+                          </button>
+                        )}
+                        {managerMode?(
+                          <button onClick={()=>{setDeletePersonModal(p);setDeletePersonStage(1);}}
+                            className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-0.5 rounded">
+                            🗑 Delete
+                          </button>
+                        ):(
+                          <span className="text-xs text-gray-300" title="Unlock Manager Mode to delete">🔒</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+
+          {/* Delete person modal — 2-stage */}
+          {deletePersonModal&&(
+            <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.55)"}}>
+              <div className="bg-white rounded-xl shadow-2xl w-[420px] overflow-hidden">
+                {deletePersonStage===1&&(
+                  <>
+                    <div className="bg-red-700 text-white px-5 py-4">
+                      <div className="text-sm font-bold">⚠️ Delete Person Record</div>
+                      <div className="text-xs text-red-200 mt-1">This will permanently remove this person from the system.</div>
+                    </div>
+                    <div className="p-5">
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 mb-4">
+                        <div className="text-sm font-bold text-gray-800">{deletePersonModal.name}</div>
+                        <div className="text-xs text-gray-400">{deletePersonModal.email} · {deletePersonModal.role} · {deletePersonModal.team}</div>
+                        {!deletePersonModal.active&&<div className="text-xs text-amber-600 mt-1">This person is already inactive.</div>}
+                      </div>
+                      <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
+                        💡 Consider making this person <strong>Inactive</strong> instead of deleting. Inactive people are hidden from dropdowns but their historical involvement in estimates is preserved.
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={()=>setDeletePersonModal(null)} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+                        <button onClick={()=>setDeletePersonStage(2)} className="flex-1 bg-red-700 hover:bg-red-600 text-white rounded px-3 py-1.5 text-xs font-semibold">Delete anyway →</button>
+                      </div>
+                    </div>
+                  </>
+                )}
+                {deletePersonStage===2&&(
+                  <>
+                    <div className="bg-red-700 text-white px-5 py-4">
+                      <div className="text-sm font-bold">Confirm Permanent Delete</div>
+                    </div>
+                    <div className="p-5">
+                      <div className="text-xs text-gray-600 mb-3">
+                        Are you sure you want to permanently delete <strong>{deletePersonModal.name}</strong>? This cannot be undone.
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={()=>setDeletePersonStage(1)} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">← Back</button>
+                        <button onClick={()=>deletePerson(deletePersonModal.id)}
+                          className="flex-1 bg-red-700 hover:bg-red-600 text-white rounded px-3 py-1.5 text-xs font-bold">🗑 Confirm Delete</button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
