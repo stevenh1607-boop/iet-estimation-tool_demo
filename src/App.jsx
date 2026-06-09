@@ -444,7 +444,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
   XL.utils.book_append_sheet(wb, ws2, "Summary");
 
   // Write to Blob
-  const wbout = XL.write(wb, { bookType:"xlsx", type:"array", cellDates:true });
+  const wbout = XL.write(wb, { bookType:"xlsx", type:"array", cellDates:true, bookSST:true });
   return new Blob([wbout], { type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
