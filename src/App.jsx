@@ -212,7 +212,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
     row[5] = spendName;
     row[6] = currType;
     row[7] = 0;
-    row[8] = getAcctCode(spendName);
+    row[8] = { t:"s", v:getAcctCode(spendName) }; // text cell — Copperleaf requires '001000 apostrophe prefix
     row[9] = resCode;
     row[10] = labourType;
     // Optional LLT/material metadata cols 11-16
@@ -382,18 +382,7 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
       ws[addr].z = "mmm-yy";
     }
   }
-  // Force account code column (col index 8 = col I) to text with @ format
-  // so Excel stores '001000 / '001001 as text strings, not numbers
-  const acctRe = /^I(\d+)$/;
-  Object.keys(ws).filter(addr => !addr.startsWith("!") && acctRe.test(addr)).forEach(addr => {
-    const cell = ws[addr];
-    if (cell && cell.v !== undefined && cell.v !== "") {
-      cell.t = "s";
-      cell.v = String(cell.v);
-      cell.z = "@";
-      delete cell.w;
-    }
-  });
+  // Account code cells are pre-tagged as text cell objects in writeSpend — no post-processing needed
 
   // Set column widths to match template
   ws["!cols"] = [
