@@ -404,6 +404,14 @@ async function generateCopperleafXLSX(inv, lines, supply, commLookup, commProfil
   ];
   const ws2 = XL.utils.aoa_to_sheet(summaryData, { cellDates: true });
   ws2["!cols"] = [{wch:70},{wch:20}];
+  // Force DD/MM/YYYY number format on date cells so Copperleaf import accepts them.
+  // B5 = Alternative Start Date (row index 4), B6 = Export Date (row index 5).
+  ["B5", "B6"].forEach(addr => {
+    if (ws2[addr]) {
+      ws2[addr].t = "d";
+      ws2[addr].z = "DD/MM/YYYY";
+    }
+  });
   XL.utils.book_append_sheet(wb, ws2, "Summary");
 
   // Write to Blob
