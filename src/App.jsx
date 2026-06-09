@@ -5396,6 +5396,12 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
   const [localSupply, setLocalSupply] = useState(null);
   const displaySupply = (localSupply || supply).map(s => ({...s, ...(overrides[s.wbs_code]||{})}));
 
+  // WBS duplicate detection — all codes currently in supply (including session-added ones)
+  const usedWbsCodesSupply = useMemo(()=> new Set(displaySupply.map(s=>s.wbs_code).filter(Boolean)), [displaySupply]);
+  const wbsAddVal     = newItem.wbs_code.trim();
+  const wbsAddDupe    = wbsAddVal && usedWbsCodesSupply.has(wbsAddVal);
+  const wbsAddOk      = wbsAddVal && !wbsAddDupe;
+
   // Build rates lookup for resource options
   const resourceTypes = useMemo(()=> rates.map(r=>r.resource_type), [rates]);
 
@@ -5470,7 +5476,7 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
   };
 
   const addItem = () => {
-    if (!newItem.wbs_code.trim() || !newItem.description.trim()) return;
+    if (!newItem.wbs_code.trim() || !newItem.description.trim() || wbsAddDupe) return;
     const toNum = v => v !== "" && v != null ? parseFloat(v) : null;
     const entry = {
       wbs_code:         newItem.wbs_code.trim(),
@@ -5600,11 +5606,23 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
               </div>
             ))}
           </div>
+          {/* WBS code validation banner */}
+          {wbsAddVal && (
+            <div className={`mt-1 mb-1 text-xs flex items-center gap-1.5 px-2 py-1 rounded ${
+              wbsAddDupe ? "bg-red-50 text-red-700 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"
+            }`}>
+              {wbsAddDupe
+                ? <><span>🚫</span><span><strong>{wbsAddVal}</strong> already exists in the supply list — duplicate WBS codes are not permitted</span></>
+                : <><span>✓</span><span><strong>{wbsAddVal}</strong> is available</span></>
+              }
+            </div>
+          )}
           <div className="mt-2 flex gap-2 items-center">
             <button onClick={addItem}
-              disabled={!newItem.wbs_code.trim()||!newItem.description.trim()}
-              className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-300 text-white px-4 py-1.5 rounded font-bold">
-              ✓ Add Item to WBS
+              disabled={!newItem.wbs_code.trim()||!newItem.description.trim()||wbsAddDupe}
+              title={wbsAddDupe?"WBS code already in use":""}
+              className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded font-bold">
+              {wbsAddDupe ? "🚫 Duplicate WBS" : "✓ Add Item to WBS"}
             </button>
             <button onClick={()=>setShowAdd(false)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
             <span className="text-[10px] text-gray-400 ml-2">Install Resource and Commission Resource are set per-estimate in the Estimation Tool</span>
@@ -5811,14 +5829,21 @@ function WBSManager({ equipSel, setEquipSel }) {
     setEditingWbs(null);
   };
   const addWbsItem = () => {
-    if (!newWbs.wbs_code.trim()||!newWbs.description.trim()) return;
-    const depth = newWbs.wbs_code.trim().split(".").length;
-    setWbsOverrides(p=>({...p,[newWbs.wbs_code.trim()]:{
-      ...newWbs, depth, wbs_code:newWbs.wbs_code.trim(), _added:true
+    const trimCode = newWbs.wbs_code.trim();
+    if (!trimCode||!newWbs.description.trim()) return;
+    // Block if already in wbs (including overrides already added)
+    const alreadyExists = wbs.some(r => r.wbs_code === trimCode);
+    if (alreadyExists) return;
+    const depth = trimCode.split(".").length;
+    setWbsOverrides(p=>({...p,[trimCode]:{
+      ...newWbs, depth, wbs_code:trimCode, _added:true
     }}));
     setShowAddWbs(false);
     setNewWbs({wbs_code:"",description:"",scope:"Supply",depth:6});
   };
+  // Real-time check for the WBS add form
+  const wbsAddMgrVal  = newWbs.wbs_code.trim();
+  const wbsAddMgrDupe = wbsAddMgrVal && wbs.some(r => r.wbs_code === wbsAddMgrVal);
 
   // Delete WBS item — double confirm, only for items added in this session
   const [deleteWbs,   setDeleteWbs]   = useState(null);
@@ -6379,7 +6404,7 @@ function EquipmentScreen({ lines, setLines, isCommercial, inv }) {
 // ── EQUIPMENT CATALOGUE MANAGER (WBS Manager tab) ────────────────
 // Admin view — full catalogue, price editing, WBS assignment, add new items
 function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
-  const { equipment, supply, loading } = useData();
+  const { equipment, supply, wbs: wbsMaster, loading } = useData();
   const [typeFilter, setTypeFilter] = useState("All");
   const [catFilter,  setCatFilter]  = useState("All");
   const [search,     setSearch]     = useState("");
@@ -6387,6 +6412,23 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
   const [editVals,   setEditVals]   = useState({});
   const [showAdd,    setShowAdd]    = useState(false);
   const [localItems, setLocalItems] = useState(null);
+
+  // ── PIN-locked Manager Mode ──────────────────────────────────
+  const MANAGER_PIN    = "1607";
+  const [managerMode,  setManagerMode]  = useState(false);
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [pinInput,     setPinInput]     = useState("");
+  const [pinError,     setPinError]     = useState(false);
+  const pinRef = useRef(null);
+  const tryUnlock = () => {
+    if (pinInput === MANAGER_PIN) {
+      setManagerMode(true); setShowPinModal(false);
+      setPinInput(""); setPinError(false);
+    } else {
+      setPinError(true); setPinInput("");
+      setTimeout(() => setPinError(false), 2000);
+    }
+  };
 
   // ── Custom category management ─────────────────────────────
   // Seed from existing equipment data, allow manager to add new ones
@@ -6430,9 +6472,11 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
   });
 
   // WBS code validation state
-  const wbsVal = newItem.wbs_code.trim();
+  const wbsVal         = newItem.wbs_code.trim();
   const wbsInCatalogue = wbsVal && usedWbsCodes.has(wbsVal);
   const wbsInSupply    = wbsVal && supplyWbsCodes.has(wbsVal);
+  // Also check wbsMaster (WBS item editor list) for existence
+  const wbsInMaster    = wbsVal && (wbsMaster||[]).some(w => w.wbs_code === wbsVal);
   const wbsOk          = wbsVal && !wbsInCatalogue;
 
   const filtered = useMemo(() => allItems.filter(e => {
@@ -6501,6 +6545,26 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
 
   return (
     <div className="flex flex-1 overflow-hidden">
+
+      {/* ── PIN Modal ── */}
+      {showPinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.45)"}}>
+          <div className="bg-white rounded-xl shadow-2xl p-6 w-80">
+            <div className="text-sm font-bold text-gray-900 mb-1">Manager Mode</div>
+            <div className="text-xs text-gray-500 mb-4">Enter PIN to enable editing and adding items</div>
+            <input ref={pinRef} type="password" value={pinInput}
+              onChange={e=>setPinInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter") tryUnlock(); if(e.key==="Escape") setShowPinModal(false); }}
+              autoFocus placeholder="Enter PIN"
+              className={`w-full border-2 rounded px-3 py-2 text-sm text-center font-mono tracking-widest focus:outline-none mb-3 ${pinError?"border-red-400 bg-red-50 animate-pulse":"border-gray-300 focus:border-blue-400"}`}/>
+            {pinError && <div className="text-xs text-red-600 text-center mb-2">Incorrect PIN</div>}
+            <div className="flex gap-2">
+              <button onClick={()=>{setShowPinModal(false);setPinInput("");}} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={tryUnlock} className="flex-1 bg-blue-700 hover:bg-blue-600 text-white rounded px-3 py-1.5 text-xs font-semibold">Unlock</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* LEFT — filter sidebar */}
       <div className="w-48 bg-white border-r flex flex-col flex-shrink-0 overflow-hidden">
         <div className="bg-teal-800 text-white px-3 py-2 flex-shrink-0">
@@ -6562,10 +6626,22 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
           {search && <button onClick={() => setSearch("")} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
           <span className="text-xs text-gray-400">{filtered.length} items</span>
           <div className="flex-1"/>
-          <button onClick={() => setShowAdd(s => !s)}
-            className={`text-xs px-3 py-1.5 rounded font-semibold ${showAdd?"bg-gray-200 text-gray-700":"bg-green-700 hover:bg-green-600 text-white"}`}>
-            {showAdd ? "✕ Cancel" : "+ Add Item"}
-          </button>
+          {managerMode ? (
+            <>
+              <button onClick={() => setShowAdd(s => !s)}
+                className={`text-xs px-3 py-1.5 rounded font-semibold ${showAdd?"bg-gray-200 text-gray-700":"bg-green-700 hover:bg-green-600 text-white"}`}>
+                {showAdd ? "✕ Cancel" : "+ Add Item"}
+              </button>
+              <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 px-3 py-1.5 rounded font-semibold flex items-center gap-1.5">
+                🔓 Manager Mode
+              </span>
+            </>
+          ) : (
+            <button onClick={() => setShowPinModal(true)}
+              className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded flex items-center gap-1.5">
+              🔒 Manager Mode
+            </button>
+          )}
         </div>
 
         {/* Add new item form */}
@@ -6640,12 +6716,15 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                   </div>
                 )}
                 {wbsInSupply && !wbsInCatalogue && (
-                  <div className="text-xs text-amber-700 mt-0.5 flex items-center gap-1">
-                    ℹ️ This WBS code exists in supply items — linking is allowed
+                  <div className="text-xs text-green-700 mt-0.5 flex items-center gap-1">
+                    ✓ WBS code found in supply items — this item will link to the Estimation Tool
                   </div>
                 )}
-                {wbsOk && !wbsInSupply && (
-                  <div className="text-xs text-green-700 mt-0.5">✓ WBS code available</div>
+                {wbsInMaster && !wbsInSupply && !wbsInCatalogue && (
+                  <div className="text-xs text-blue-700 mt-0.5">ℹ️ Found in WBS Master — check supply items for full linkage</div>
+                )}
+                {wbsOk && !wbsInSupply && !wbsInMaster && (
+                  <div className="text-xs text-amber-700 mt-0.5">⚠️ Not found in supply items — will show in catalogue but won't link to estimation tool</div>
                 )}
               </div>
 
@@ -6697,6 +6776,7 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                 <th className="text-left px-2 py-2 font-semibold text-gray-500 w-24">Contract</th>
                 <th className="text-center px-2 py-2 font-semibold text-red-600 w-16">Lead</th>
                 <th className="text-right px-2 py-2 font-semibold text-gray-500 w-24">Price</th>
+                <th className="text-center px-2 py-2 font-semibold text-blue-500 w-16" title="WBS linkage to supply items and WBS Master">Linked</th>
                 <th className="text-center px-2 py-2 font-semibold text-gray-400 w-14">Actions</th>
               </tr>
             </thead>
@@ -6756,6 +6836,24 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                       }
                     </td>
                     <td className="px-2 py-1.5 text-center">
+                      {(() => {
+                        const wc = item.wbs_code;
+                        const inSupply = wc && supplyWbsCodes.has(wc);
+                        const inMaster = wc && (wbsMaster||[]).some(w => w.wbs_code === wc);
+                        if (!wc) return <span className="text-gray-300 text-[10px]" title="No WBS code set">—</span>;
+                        if (inSupply && inMaster) return (
+                          <span className="bg-green-100 text-green-700 border border-green-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code found in supply items and WBS Master — will appear in Estimation Tool">✓ Live</span>
+                        );
+                        if (inMaster && !inSupply) return (
+                          <span className="bg-blue-100 text-blue-700 border border-blue-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code in WBS Master but not in supply — may not appear in estimation">WBS only</span>
+                        );
+                        if (inSupply && !inMaster) return (
+                          <span className="bg-amber-100 text-amber-700 border border-amber-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code in supply items — will show in estimation but not in WBS master list">Supply</span>
+                        );
+                        return <span className="bg-red-100 text-red-600 border border-red-200 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code not found in supply items or WBS Master — item will not link to estimation tool">Unlinked</span>;
+                      })()}
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
                       {isEd ? (
                         <div className="flex gap-1 justify-center">
                           <button onClick={() => saveEdit(item.id)}
@@ -6764,8 +6862,9 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                             className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-1.5 py-0.5 rounded text-[10px]">✕</button>
                         </div>
                       ) : (
-                        <button onClick={() => startEdit(item)}
-                          className="text-blue-500 hover:text-blue-700 text-[10px] border border-blue-200 hover:border-blue-400 px-1.5 py-0.5 rounded">Edit</button>
+                        managerMode
+                          ? <button onClick={() => startEdit(item)} className="text-blue-500 hover:text-blue-700 text-[10px] border border-blue-200 hover:border-blue-400 px-1.5 py-0.5 rounded">Edit</button>
+                          : <span className="text-gray-300 text-[10px]" title="Unlock Manager Mode to edit">🔒</span>
                       )}
                     </td>
                   </tr>
