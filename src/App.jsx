@@ -6964,35 +6964,156 @@ function EquipmentScreen({ lines, setLines, isCommercial, inv }) {
 // Admin view — full catalogue, price editing, WBS assignment, add new items
 // ── EQUIPMENT PRICING EDITOR ─────────────────────────────────────────────────
 // Shows base price, date of quote, annual escalation rate, and calculates
-// current escalated price for PCE, SCADA and Comms equipment items.
-// Matches the logic from the workbook's Period Contract Equipment / SCADA / Comms sheets.
+// ── ESC STREAM DEFINITIONS ──────────────────────────────────────────────────
+// Three standard streams from the IET workbook Escalation sheet (FY26-FY29).
+// Index 0 = FY26 base year (no escalation applied), 1=FY27, 2=FY28, 3=FY29, 4=FY30
+const ESC_STREAMS = {
+  Materials:   { label: "Materials",             color: "purple", rates: [0, 0.049, 0.040, 0.040, 0.040] },
+  Contractors: { label: "Contractors",           color: "orange", rates: [0, 0.049, 0.045, 0.040, 0.035] },
+  EEInternal:  { label: "EE Internal (labour)",  color: "blue",   rates: [0, 0.045, 0.038, 0.035, 0.035] },
+  Manual:      { label: "Manual entry",          color: "gray",   rates: null },
+};
+const ESC_FY_LABELS = ["FY26","FY27","FY28","FY29","FY30"];
+
+// Sub-component: escalation preview table
+function EscPreviewTable({ basePrice, streamKey, manualRates, highlightFY }) {
+  const stream = ESC_STREAMS[streamKey];
+  const rates  = stream.rates || manualRates || [0,0,0,0,0];
+  const fmtP   = (v) => v != null && v > 0 ? "$" + Math.round(v).toLocaleString("en-AU") : "—";
+  const fmtR   = (r, i) => i === 0 ? "base year" : (r*100).toFixed(1)+"%";
+  let cf = 1;
+  const rows = rates.map((r, i) => {
+    if (i > 0) cf *= (1 + r);
+    const esc   = basePrice * cf;
+    const added = esc - basePrice;
+    const isHL  = ESC_FY_LABELS[i] === highlightFY;
+    return { fy: ESC_FY_LABELS[i], rate: r, cf, esc, added, isHL, i };
+  });
+  return (
+    <table className="w-full text-[10px] border-collapse">
+      <thead>
+        <tr className="border-b border-gray-200">
+          <th className="text-left py-1 px-2 text-gray-400 font-medium">FY</th>
+          <th className="text-right py-1 px-2 text-gray-400 font-medium">Rate</th>
+          <th className="text-right py-1 px-2 text-gray-400 font-medium">Cum. factor</th>
+          <th className="text-right py-1 px-2 text-gray-400 font-medium">Base (stored)</th>
+          <th className="text-right py-1 px-2 text-gray-400 font-medium">Escalated</th>
+          <th className="text-right py-1 px-2 text-gray-400 font-medium">Added/unit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({fy, rate, cf: cumF, esc, added, isHL, i}) => (
+          <tr key={fy} className={isHL ? "bg-blue-50 font-semibold" : "border-b border-gray-100"}>
+            <td className={`py-1 px-2 ${isHL?"text-blue-700":"text-gray-600"}`}>{fy}{isHL?" <":""}</td>
+            <td className={`py-1 px-2 text-right ${isHL?"text-blue-600":"text-gray-400"}`}>{fmtR(rate,i)}</td>
+            <td className="py-1 px-2 text-right text-gray-500">{cumF.toFixed(4)}x</td>
+            <td className="py-1 px-2 text-right text-gray-600">{fmtP(basePrice)}</td>
+            <td className={`py-1 px-2 text-right font-bold ${isHL?"text-blue-700":"text-green-700"}`}>{fmtP(esc)}</td>
+            <td className={`py-1 px-2 text-right ${added>0?"text-amber-600":"text-gray-300"}`}>{added>0?"+"+fmtP(added):"--"}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+// Sub-component: escalation stream selector
+function EscStreamSelector({ streamKey, setStreamKey, manualRates, setManualRates, compact=false }) {
+  const streamColors = {
+    Materials:   "border-purple-400 bg-purple-50 text-purple-800",
+    Contractors: "border-orange-400 bg-orange-50 text-orange-800",
+    EEInternal:  "border-blue-400 bg-blue-50 text-blue-800",
+    Manual:      "border-gray-400 bg-gray-50 text-gray-700",
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Escalation stream</div>
+      <div className="flex flex-wrap gap-1.5">
+        {Object.entries(ESC_STREAMS).map(([key, s]) => (
+          <button key={key}
+            onClick={() => setStreamKey(key)}
+            className={`text-[10px] px-2 py-0.5 rounded border font-medium transition-colors ${
+              streamKey === key ? streamColors[key] : "border-gray-200 bg-white text-gray-500 hover:border-gray-300"
+            }`}>
+            {s.label}
+            {s.rates && (
+              <span className="ml-1 opacity-60">
+                {s.rates.filter(r=>r>0).map(r=>(r*100).toFixed(1)+"%").join("/")}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      {streamKey === "Manual" && (
+        <div className="flex gap-2 mt-1 flex-wrap items-end">
+          {["FY27","FY28","FY29","FY30"].map((fy, i) => (
+            <div key={fy} className="flex flex-col items-center gap-0.5">
+              <span className="text-[9px] text-gray-400">{fy}</span>
+              <input type="number" step="0.1" min="0" max="30"
+                value={((manualRates?.[i+1]||0)*100).toFixed(1)}
+                onChange={e => {
+                  const next = [...(manualRates||[0,0,0,0,0])];
+                  next[i+1] = parseFloat(e.target.value)/100 || 0;
+                  setManualRates(next);
+                }}
+                className="w-16 border border-gray-300 rounded px-1.5 py-0.5 text-[10px] text-center focus:outline-none focus:ring-1 focus:ring-gray-400"
+                placeholder="%"/>
+            </div>
+          ))}
+          <span className="text-[9px] text-gray-400 italic pb-0.5">% per year</span>
+        </div>
+      )}
+      {streamKey !== "Manual" && ESC_STREAMS[streamKey].rates && (
+        <div className="text-[9px] text-gray-400">
+          Workbook rates (FY27-FY30): {ESC_STREAMS[streamKey].rates.slice(1).map((r,i)=>`FY${27+i} ${(r*100).toFixed(1)}%`).join(" / ")}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
-  // ── Data ──────────────────────────────────────────────────────
-  // equipPricing: keyed by wbs_code, holds base_price / price_date / esc_rate
-  // supply: the live supply items — pce_price in supply IS the escalated cost
-  // When manager edits base_price/date/rate here, we derive a new escalated price
-  // that overrides pce_price in estimation (via localPricing propagated through context).
   const { equipPricing: ctxPricing } = useData();
   const [localPricing, setLocalPricing] = useState(null);
   const [editingKey,   setEditingKey]   = useState(null);
   const [editVals,     setEditVals]     = useState({});
   const [expanded,     setExpanded]     = useState({});
+  const [histTab,      setHistTab]      = useState({});
   const [search,       setSearch]       = useState("");
   const [sourceFilter, setSourceFilter] = useState("All");
 
+  // Escalation stream state -- shared across all expanded item previews
+  const [escStream,    setEscStream]    = useState("Materials");
+  const [manualRates,  setManualRates]  = useState([0, 0.049, 0.040, 0.040, 0.040]);
+  const [highlightFY,  setHighlightFY]  = useState("FY28");
+
+  // Edit-panel escalation stream (independent from preview stream)
+  const [editEscStream,   setEditEscStream]   = useState("Materials");
+  const [editManualRates, setEditManualRates] = useState([0, 0.049, 0.040, 0.040, 0.040]);
+
   const basePricing = localPricing || ctxPricing || {};
 
-  // ── Escalation formula (matches workbook: base × (1+rate)^years) ──────────
+  // Single-rate compound formula -- used for stored escalated_price (existing behaviour)
   const calcEscalated = (basePrice, priceDate, escRate) => {
     if (!basePrice || basePrice <= 0) return null;
     const rate = escRate ?? 0.06;
-    if (!priceDate) return basePrice * (1 + rate); // assume 1yr if no date
+    if (!priceDate) return basePrice * (1 + rate);
     const yearsElapsed = (Date.now() - new Date(priceDate).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
     if (yearsElapsed <= 0) return basePrice;
     return basePrice * Math.pow(1 + rate, yearsElapsed);
   };
 
-  // ── Sorted + filtered array ───────────────────────────────────
+  // FY-stream escalation: compound IET stream rates up to a chosen FY
+  const escToFY = (basePrice, streamKey, manual, targetFYLabel) => {
+    if (!basePrice || basePrice <= 0) return null;
+    const rates = ESC_STREAMS[streamKey].rates || manual || [0,0,0,0,0];
+    const idx   = ESC_FY_LABELS.indexOf(targetFYLabel);
+    if (idx < 0) return basePrice;
+    let cf = 1;
+    for (let i = 1; i <= idx; i++) cf *= (1 + (rates[i]||0));
+    return basePrice * cf;
+  };
+
   const pricingArray = useMemo(() =>
     Object.values(basePricing).sort((a, b) => (a.wbs_code||"").localeCompare(b.wbs_code||""))
   , [basePricing]);
@@ -7012,10 +7133,10 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
     });
   }, [pricingArray, search, sourceFilter]);
 
-  // ── Edit handlers ─────────────────────────────────────────────
   const startEdit = (r) => {
     setEditingKey(r.wbs_code);
-    setExpanded(p => ({...p, [r.wbs_code]: true})); // auto-expand on edit
+    setExpanded(p => ({...p, [r.wbs_code]: true}));
+    setHistTab(p => ({...p, [r.wbs_code]: "history"}));
     setEditVals({
       base_price: r.base_price != null ? String(r.base_price) : "",
       price_date: r.price_date ?? "",
@@ -7028,28 +7149,32 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
     const next = { ...basePricing };
     if (!next[key]) return;
     const oldRow  = next[key];
-    const newBase  = parseFloat(editVals.base_price);
-    const newDate  = editVals.price_date || oldRow.price_date;
-    const newRate  = parseFloat(editVals.esc_rate) / 100;
-    const newEsc   = (!isNaN(newBase) && newDate && !isNaN(newRate))
+    const newBase = parseFloat(editVals.base_price);
+    const newDate = editVals.price_date || oldRow.price_date;
+    const newRate = parseFloat(editVals.esc_rate) / 100;
+    const newEsc  = (!isNaN(newBase) && newDate && !isNaN(newRate))
       ? calcEscalated(newBase, newDate, newRate)
       : oldRow.escalated_price;
+    const prevHistory = oldRow._history || [];
+    const histEntry   = oldRow.base_price != null ? {
+      fy: "Prior", base: oldRow.base_price, date: oldRow.price_date,
+      updatedBy: "S. Hannigan", note: oldRow.comments || "",
+    } : null;
     next[key] = {
       ...oldRow,
-      base_price:     !isNaN(newBase) ? newBase : oldRow.base_price,
-      price_date:     newDate,
-      esc_rate:       !isNaN(newRate) ? newRate : oldRow.esc_rate,
-      escalated_price: newEsc,   // derived — this is what flows to pce_price in estimation
-      comments:       editVals.comments,
-      _edited:        true,
+      base_price:      !isNaN(newBase) ? newBase : oldRow.base_price,
+      price_date:      newDate,
+      esc_rate:        !isNaN(newRate) ? newRate : oldRow.esc_rate,
+      escalated_price: newEsc,
+      comments:        editVals.comments,
+      _edited:         true,
+      _history:        histEntry ? [...prevHistory, histEntry] : prevHistory,
     };
     setLocalPricing(next);
-    // Propagate to App-level equipPricing so resolvedSupply recalculates immediately
     if (onPriceUpdate) onPriceUpdate(key, next[key]);
     setEditingKey(null);
   };
 
-  // ── Helpers ───────────────────────────────────────────────────
   const srcBadge = (src) => {
     const cfg = {
       PCE:   "bg-blue-100 text-blue-800 border-blue-200",
@@ -7060,26 +7185,28 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
   };
 
   const fmtPrice = (v) => v != null && v > 0
-    ? "$" + v.toLocaleString("en-AU", {minimumFractionDigits:2, maximumFractionDigits:2})
-    : "—";
+    ? "$" + v.toLocaleString("en-AU", {minimumFractionDigits:2, maximumFractionDigits:2}) : "--";
+  const fmtPriceRound = (v) => v != null && v > 0
+    ? "$" + Math.round(v).toLocaleString("en-AU") : "--";
 
   const ageYears = (dateStr) => {
     if (!dateStr) return null;
     return (Date.now() - new Date(dateStr).getTime()) / (1000*60*60*24*365.25);
   };
 
-  const staleCount = filtered.filter(r => { const a = ageYears(r.price_date); return a === null || a > 2; }).length;
+  const staleCount  = filtered.filter(r => { const a = ageYears(r.price_date); return a === null || a > 2; }).length;
   const editedCount = Object.values(basePricing).filter(r => r._edited).length;
+  const FY_OPTIONS  = ESC_FY_LABELS.slice(1);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
 
-      {/* ── Toolbar ── */}
+      {/* Toolbar */}
       <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <input value={search} onChange={e=>setSearch(e.target.value)}
-          placeholder="Search WBS, description, make, category…"
+          placeholder="Search WBS, description, make, category..."
           className="border border-gray-300 rounded px-2 py-1 text-xs w-56 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
-        {search && <button onClick={()=>setSearch("")} className="text-gray-400 text-xs hover:text-gray-600">✕</button>}
+        {search && <button onClick={()=>setSearch("")} className="text-gray-400 text-xs hover:text-gray-600">x</button>}
         <select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none">
           <option value="All">All sources</option>
@@ -7090,80 +7217,65 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
         <span className="text-xs text-gray-400">{filtered.length} items</span>
         {staleCount > 0 && (
           <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded">
-            ⚠️ {staleCount} prices &gt;2yr old
+            {staleCount} prices &gt;2yr old
           </span>
         )}
         {editedCount > 0 && (
           <span className="text-xs text-orange-700 bg-orange-50 border border-orange-200 px-2 py-1 rounded font-semibold">
-            ⚡ {editedCount} edited this session
+            {editedCount} edited this session
           </span>
         )}
         <div className="flex-1"/>
         {managerMode ? (
-          <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 px-3 py-1.5 rounded font-semibold">🔓 Manager Mode</span>
+          <span className="text-xs bg-orange-100 text-orange-700 border border-orange-300 px-3 py-1.5 rounded font-semibold">Manager Mode</span>
         ) : (
-          <button onClick={onUnlock} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded">🔒 Manager Mode</button>
+          <button onClick={onUnlock} className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-3 py-1.5 rounded">Manager Mode</button>
         )}
       </div>
 
-      {/* ── Data flow notice ── */}
-      <div className="bg-blue-50 border-b border-blue-200 px-3 py-1.5 text-[10px] text-blue-700 flex items-center gap-2 flex-shrink-0">
+      {/* Data flow notice */}
+      <div className="bg-blue-50 border-b border-blue-200 px-3 py-1.5 text-[10px] text-blue-700 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <span className="font-semibold">Data flow:</span>
-        <span className="font-mono bg-blue-100 px-1 rounded">Base Price</span>
-        <span>+</span>
-        <span className="font-mono bg-blue-100 px-1 rounded">Price Date</span>
-        <span>+</span>
-        <span className="font-mono bg-blue-100 px-1 rounded">Annual Esc. %</span>
-        <span>→</span>
+        <span className="font-mono bg-blue-100 px-1 rounded">Base Price (catalogue)</span>
+        <span className="text-blue-400">stored as-is, not pre-escalated</span>
+        <span>-&gt;</span>
         <span className="font-mono bg-green-100 text-green-800 px-1 rounded font-semibold">Escalated Cost</span>
-        <span>→</span>
-        <span className="font-mono bg-orange-100 text-orange-800 px-1 rounded">pce_price in supply items</span>
-        <span>→</span>
-        <span className="font-mono bg-orange-100 text-orange-800 px-1 rounded">Estimation Tool materials cost</span>
-        <span className="ml-2 text-blue-500">Editing base price here updates the escalated cost used in estimation</span>
+        <span className="text-blue-400">derived by engine using project timeline + stream rates</span>
+        <span>-&gt;</span>
+        <span className="font-mono bg-orange-100 text-orange-800 px-1 rounded">pce_price -&gt; materials cost</span>
+        <span className="ml-auto text-blue-400 italic">Escalation preview is reference only</span>
       </div>
 
-      {/* ── Item list ── */}
+      {/* Item list */}
       <div className="flex-1 overflow-y-auto">
         {filtered.map(r => {
-          const isEd  = editingKey === r.wbs_code;
-          const isExp = !!expanded[r.wbs_code];
-          const esc   = calcEscalated(r.base_price, r.price_date, r.esc_rate);
-          const age   = ageYears(r.price_date);
+          const isEd    = editingKey === r.wbs_code;
+          const isExp   = !!expanded[r.wbs_code];
+          const itemTab = histTab[r.wbs_code] || "history";
+          const esc     = calcEscalated(r.base_price, r.price_date, r.esc_rate);
+          const age     = ageYears(r.price_date);
           const isStale = age === null || age > 2;
           const uplift  = esc && r.base_price ? esc - r.base_price : 0;
-          const hasDetails = r.contract_no || r.item_no || r.oracle_id || r.drawing_no
-            || r.lead_weeks || r.rating || r.comments || r.make || r.model || r.family;
 
           return (
             <div key={r.wbs_code}
               className={`border-b ${isStale&&!isEd?"bg-amber-50/30":isEd?"bg-blue-50":r._edited?"bg-orange-50/30":""}`}>
 
-              {/* ── Main compact row ── */}
+              {/* Main compact row */}
               <div className="flex items-center px-3 py-2 gap-2 text-xs">
-
-                {/* Expand toggle */}
                 <button
                   onClick={()=>setExpanded(p=>({...p,[r.wbs_code]:!p[r.wbs_code]}))}
                   className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-xs transition-colors ${
                     isExp ? "bg-blue-600 text-white" : "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
                   }`}>
-                  {isExp ? "▾" : "▸"}
+                  {isExp ? "v" : ">"}
                 </button>
-
-                {/* WBS code */}
                 <span className="font-mono text-[10px] text-gray-500 flex-shrink-0 w-32">{r.wbs_code}</span>
-
-                {/* Source badge */}
                 <span className="flex-shrink-0">{srcBadge(r.source)}</span>
-
-                {/* Description */}
                 <span className="flex-1 min-w-0 text-gray-800 font-medium truncate" title={r.description}>
                   {r.description}
-                  {r._edited && <span className="ml-1 text-[9px] text-orange-600 font-semibold">⚡ edited</span>}
+                  {r._edited && <span className="ml-1 text-[9px] text-orange-600 font-semibold"> edited</span>}
                 </span>
-
-                {/* Category */}
                 <span className="text-gray-400 text-[10px] w-28 flex-shrink-0 truncate hidden xl:block">{r.category}</span>
 
                 {/* Base price */}
@@ -7186,7 +7298,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                       className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                   ) : (
                     <span className={`text-[10px] ${isStale?"text-amber-700 font-semibold":"text-gray-500"}`}>
-                      {r.price_date || "—"}
+                      {r.price_date || "--"}
                       {isStale && age !== null && <span className="ml-1 text-[9px]">({age.toFixed(1)}y)</span>}
                     </span>
                   )}
@@ -7200,31 +7312,38 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                       className="w-full border border-purple-300 rounded px-1 py-0.5 text-xs text-right focus:outline-none"
                       placeholder="%"/>
                   ) : (
-                    <span className="text-purple-700">{r.esc_rate != null ? (r.esc_rate*100).toFixed(1)+"%" : "—"}</span>
+                    <span className="text-purple-700">{r.esc_rate != null ? (r.esc_rate*100).toFixed(1)+"%" : "--"}</span>
                   )}
                 </div>
 
-                {/* Arrow */}
-                <span className="text-gray-300 text-xs flex-shrink-0">→</span>
+                <span className="text-gray-300 text-xs flex-shrink-0">-&gt;</span>
 
-                {/* Escalated price */}
+                {/* Escalated price (stored) */}
                 <div className="flex-shrink-0 w-32 text-right">
                   {esc ? (
                     <div>
                       <div className={`font-bold ${isStale?"text-amber-700":"text-green-800"}`}>{fmtPrice(esc)}</div>
                       {uplift > 0.5 && <div className="text-[9px] text-gray-400">+{fmtPrice(uplift)} esc.</div>}
                     </div>
-                  ) : <span className="text-gray-300">—</span>}
+                  ) : <span className="text-gray-300">--</span>}
                 </div>
 
-                {/* Actions */}
-                <div className="flex-shrink-0 w-20 text-right">
+                {/* Action buttons */}
+                <div className="flex-shrink-0 flex gap-1 justify-end">
+                  <button
+                    onClick={()=>{setExpanded(p=>({...p,[r.wbs_code]:true}));setHistTab(p=>({...p,[r.wbs_code]:"history"}));}}
+                    className="text-gray-400 hover:text-gray-700 text-[10px] border border-gray-200 hover:border-gray-300 rounded px-1.5 py-0.5"
+                    title="Price history">Hist</button>
+                  <button
+                    onClick={()=>{setExpanded(p=>({...p,[r.wbs_code]:true}));setHistTab(p=>({...p,[r.wbs_code]:"escalation"}));}}
+                    className="text-gray-400 hover:text-purple-600 text-[10px] border border-gray-200 hover:border-purple-300 rounded px-1.5 py-0.5"
+                    title="Escalation preview">Esc</button>
                   {managerMode && (isEd ? (
-                    <div className="flex gap-1 justify-end">
+                    <div className="flex gap-1">
                       <button onClick={()=>saveEdit(r.wbs_code)}
-                        className="bg-green-700 hover:bg-green-600 text-white text-[10px] px-2 py-0.5 rounded font-bold">✓ Save</button>
+                        className="bg-green-700 hover:bg-green-600 text-white text-[10px] px-2 py-0.5 rounded font-bold">Save</button>
                       <button onClick={()=>setEditingKey(null)}
-                        className="border border-gray-300 text-gray-500 text-[10px] px-1.5 py-0.5 rounded hover:bg-gray-50">✕</button>
+                        className="border border-gray-300 text-gray-500 text-[10px] px-1.5 py-0.5 rounded hover:bg-gray-50">x</button>
                     </div>
                   ) : (
                     <button onClick={()=>startEdit(r)}
@@ -7235,127 +7354,259 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                 </div>
               </div>
 
-              {/* ── Expanded detail panel ── */}
+              {/* Expanded detail panel */}
               {isExp && (
                 <div className="mx-3 mb-3 rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden text-xs">
+
+                  {/* Header */}
                   <div className="bg-gray-700 text-white px-3 py-1.5 flex items-center justify-between">
-                    <span className="font-semibold">{r.wbs_code} — {r.description}</span>
-                    <span className="text-gray-400 text-[10px]">{srcBadge(r.source)} source pricing</span>
+                    <span className="font-semibold">{r.wbs_code} -- {r.description}</span>
+                    <div className="flex items-center gap-2">
+                      {srcBadge(r.source)}
+                      <button onClick={()=>setExpanded(p=>({...p,[r.wbs_code]:false}))}
+                        className="text-gray-400 hover:text-white ml-2 text-xs">x</button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-y border border-gray-100">
 
-                    {/* Pricing block */}
-                    <div className="p-3 bg-blue-50/60 col-span-2">
-                      <div className="text-[10px] text-gray-500 uppercase font-semibold mb-2 border-b pb-1">💲 Pricing</div>
-                      <div className="grid grid-cols-3 gap-2 text-center">
-                        <div>
-                          <div className="text-[10px] text-gray-400">Base Price (quoted)</div>
-                          <div className="font-bold text-blue-800 text-sm">{fmtPrice(r.base_price)}</div>
-                          <div className="text-[10px] text-gray-400">as at {r.price_date||"unknown"}</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-gray-400">Annual Escalation</div>
-                          <div className="font-bold text-purple-700 text-sm">{r.esc_rate != null ? (r.esc_rate*100).toFixed(1)+"%" : "—"}</div>
-                          <div className="text-[10px] text-gray-400">per year</div>
-                        </div>
-                        <div>
-                          <div className="text-[10px] text-gray-400">Current Escalated</div>
-                          <div className={`font-bold text-sm ${isStale?"text-amber-700":"text-green-800"}`}>{fmtPrice(esc)}</div>
-                          <div className="text-[10px] text-gray-400">
-                            {age != null ? `${age.toFixed(1)} yr${age>=2?" ⚠️":""} since quote` : "no date set"}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-2 text-[10px] text-gray-500 bg-white border border-gray-200 rounded p-1.5">
-                        <span className="font-semibold">Flow: </span>
-                        Base price × (1 + {((r.esc_rate||0.06)*100).toFixed(1)}%)^{age!=null?age.toFixed(2):"?"} years
-                        = <span className="font-bold text-green-700">{fmtPrice(esc)}</span>
-                        <span className="ml-2 text-gray-400">→ used as pce_price in supply items → materials cost in estimation</span>
-                      </div>
-                    </div>
-
-                    {/* Item details */}
-                    <div className="p-3 col-span-2">
-                      <div className="text-[10px] text-gray-500 uppercase font-semibold mb-2 border-b pb-1">📦 Item Details</div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                        {[
-                          ["Category",    r.category],
-                          ["Family / Voltage", r.family],
-                          ["Make",        r.make],
-                          ["Model",       r.model],
-                          ["Contract No.", r.contract_no],
-                          ["Item No.",    r.item_no],
-                          ["Drawing No.", r.drawing_no],
-                          ["Lead Time",   r.lead_weeks ? r.lead_weeks + " weeks" : null],
-                          ["Unit",        r.unit],
-                        ].filter(([,v]) => v).map(([label, val]) => (
-                          <div key={label} className="flex gap-1">
-                            <span className="text-gray-400 flex-shrink-0 w-24">{label}:</span>
-                            <span className="text-gray-700 font-medium">{val}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Comments */}
-                    {(r.comments || r.price_comments) && (
-                      <div className="p-3 col-span-4 bg-amber-50/40">
-                        <div className="text-[10px] text-gray-500 uppercase font-semibold mb-1">📝 Comments / Price Notes</div>
-                        {r.price_comments && <div className="text-gray-700 mb-1">{r.price_comments}</div>}
-                        {r.comments && r.comments !== r.price_comments && <div className="text-gray-500 italic">{r.comments}</div>}
-                      </div>
-                    )}
-
-                    {/* Edit form (Manager Mode) */}
+                  {/* Tab bar */}
+                  <div className="flex border-b border-gray-200 bg-gray-50">
+                    {[
+                      {id:"history",    label:"Price history"},
+                      {id:"escalation", label:"Escalation preview"},
+                      {id:"details",    label:"Item details"},
+                    ].map(t => (
+                      <button key={t.id}
+                        onClick={()=>setHistTab(p=>({...p,[r.wbs_code]:t.id}))}
+                        className={`px-3 py-1.5 text-[10px] font-medium border-b-2 transition-colors ${
+                          itemTab===t.id
+                            ? "border-blue-500 text-blue-700 bg-white"
+                            : "border-transparent text-gray-500 hover:text-gray-700"
+                        }`}>{t.label}</button>
+                    ))}
                     {isEd && (
-                      <div className="p-3 col-span-4 bg-blue-50 border-t-2 border-blue-400">
-                        <div className="text-[10px] text-blue-700 font-semibold uppercase mb-2">✏️ Edit Pricing — changes update the escalated cost used in estimation</div>
-                        <div className="grid grid-cols-4 gap-3">
-                          <div>
-                            <label className="text-[10px] text-gray-500 block mb-0.5">Base Price ($)</label>
-                            <input type="number" step="0.01" value={editVals.base_price}
-                              onChange={e=>setEditVals(p=>({...p,base_price:e.target.value}))}
-                              className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500 block mb-0.5">Price Date</label>
-                            <input type="date" value={editVals.price_date}
-                              onChange={e=>setEditVals(p=>({...p,price_date:e.target.value}))}
-                              className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500 block mb-0.5">Annual Esc. Rate (%)</label>
-                            <input type="number" step="0.1" min="0" max="50" value={editVals.esc_rate}
-                              onChange={e=>setEditVals(p=>({...p,esc_rate:e.target.value}))}
-                              className="w-full border-2 border-purple-400 rounded px-2 py-1 text-xs focus:outline-none"/>
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-gray-500 block mb-0.5">Comments</label>
-                            <input type="text" value={editVals.comments}
-                              onChange={e=>setEditVals(p=>({...p,comments:e.target.value}))}
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none"/>
-                          </div>
-                        </div>
-                        {/* Live preview */}
-                        {editVals.base_price && editVals.price_date && (
-                          <div className="mt-2 text-[10px] text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
-                            Preview: ${parseFloat(editVals.base_price)||0} × (1 + {editVals.esc_rate||6}%)^
-                            {((Date.now()-new Date(editVals.price_date).getTime())/(1000*60*60*24*365.25)).toFixed(2)} years
-                            = <span className="font-bold text-base">
-                              {fmtPrice(calcEscalated(parseFloat(editVals.base_price), editVals.price_date, parseFloat(editVals.esc_rate)/100))}
-                            </span>
-                            <span className="ml-2 text-gray-500">→ this value will be used as pce_price in supply items</span>
-                          </div>
-                        )}
-                        <div className="flex gap-2 mt-2">
-                          <button onClick={()=>saveEdit(r.wbs_code)}
-                            className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-1.5 rounded font-bold">✓ Save Changes</button>
-                          <button onClick={()=>setEditingKey(null)}
-                            className="border border-gray-300 text-gray-600 text-xs px-3 py-1.5 rounded hover:bg-gray-50">✕ Cancel</button>
-                        </div>
-                      </div>
+                      <button
+                        onClick={()=>setHistTab(p=>({...p,[r.wbs_code]:"edit"}))}
+                        className={`px-3 py-1.5 text-[10px] font-medium border-b-2 transition-colors ${
+                          itemTab==="edit"
+                            ? "border-blue-500 text-blue-700 bg-blue-50"
+                            : "border-transparent text-blue-500 hover:text-blue-700"
+                        }`}>Edit price</button>
                     )}
                   </div>
+
+                  {/* TAB: Price history */}
+                  {itemTab === "history" && (
+                    <div className="p-3">
+                      <div className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mb-3">
+                        <span className="font-semibold">Base prices only</span> -- raw contract prices stored in the catalogue.
+                        Escalation applied by estimation engine per project timeline. See Escalation preview tab to project forward.
+                      </div>
+                      <table className="w-full border-collapse text-[10px]">
+                        <thead>
+                          <tr className="border-b border-gray-200">
+                            {["FY","Effective from","Expires","Base contract price","Change vs prior","Updated by","Notes"].map(h=>(
+                              <th key={h} className={`py-1 px-2 text-gray-400 font-medium ${h==="Base contract price"||h==="Change vs prior"?"text-right":"text-left"}`}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(r._history||[]).map((h, i, arr) => {
+                            const prev  = i > 0 ? arr[i-1].base : null;
+                            const delta = prev ? h.base - prev : null;
+                            const pct   = prev ? ((h.base - prev) / prev * 100).toFixed(1) : null;
+                            return (
+                              <tr key={i} className="border-b border-gray-100">
+                                <td className="py-1 px-2 text-gray-500">{h.fy||"Prior"}</td>
+                                <td className="py-1 px-2 text-gray-500">{h.date||"--"}</td>
+                                <td className="py-1 px-2 text-gray-400">--</td>
+                                <td className="py-1 px-2 text-right text-gray-700 font-medium">{fmtPrice(h.base)}</td>
+                                <td className="py-1 px-2 text-right">
+                                  {delta == null ? <span className="text-gray-300">--</span>
+                                    : delta > 0
+                                      ? <span className="text-red-600">+{fmtPriceRound(delta)} (+{pct}%)</span>
+                                      : <span className="text-green-600">{fmtPriceRound(delta)} ({pct}%)</span>}
+                                </td>
+                                <td className="py-1 px-2 text-gray-500">{h.updatedBy||"--"}</td>
+                                <td className="py-1 px-2 text-gray-400 italic">{h.note||"--"}</td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="bg-green-50 border-l-2 border-green-500">
+                            <td className="py-1.5 px-2 text-green-700 font-semibold">FY26 Active</td>
+                            <td className="py-1.5 px-2 text-gray-500">{r.price_date||"--"}</td>
+                            <td className="py-1.5 px-2 text-gray-400">30 Jun 2026</td>
+                            <td className="py-1.5 px-2 text-right font-bold text-green-800">{fmtPrice(r.base_price)}</td>
+                            <td className="py-1.5 px-2 text-right text-gray-400 text-[9px]">current</td>
+                            <td className="py-1.5 px-2 text-gray-500">S. Hannigan</td>
+                            <td className="py-1.5 px-2 text-gray-400 italic truncate max-w-[160px]">{r.comments||"--"}</td>
+                          </tr>
+                          <tr className="border-b border-gray-100 bg-amber-50/40">
+                            <td className="py-1 px-2 text-amber-600 font-medium">FY27</td>
+                            <td colSpan={3} className="py-1 px-2 text-gray-300">Not yet set</td>
+                            <td className="py-1 px-2 text-right text-amber-600 text-[9px]">update due</td>
+                            <td colSpan={2} className="py-1 px-2 text-gray-300">--</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      {managerMode && (
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={()=>{startEdit(r);setHistTab(p=>({...p,[r.wbs_code]:"edit"}));}}
+                            className="text-[10px] border border-blue-300 text-blue-700 hover:bg-blue-50 rounded px-3 py-1">
+                            Enter FY27 price
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Escalation preview */}
+                  {itemTab === "escalation" && (
+                    <div className="p-3">
+                      <div className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 mb-3">
+                        Preview only -- base price <span className="font-semibold text-blue-700">{fmtPrice(r.base_price)}</span> projected
+                        forward using selected stream. Does not affect stored values. Choose stream or enter manual rates.
+                      </div>
+                      <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded">
+                        <EscStreamSelector streamKey={escStream} setStreamKey={setEscStream}
+                          manualRates={manualRates} setManualRates={setManualRates} compact={true}/>
+                      </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-[10px] text-gray-500">Highlight FY:</span>
+                        {FY_OPTIONS.map(fy => (
+                          <button key={fy} onClick={()=>setHighlightFY(fy)}
+                            className={`text-[10px] px-2 py-0.5 rounded border ${
+                              highlightFY===fy ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500 hover:border-gray-300"
+                            }`}>{fy}</button>
+                        ))}
+                        <span className="ml-2 text-[10px] text-blue-600 font-semibold">
+                          {fmtPriceRound(escToFY(r.base_price, escStream, manualRates, highlightFY))}/unit in {highlightFY}
+                        </span>
+                      </div>
+                      {r.base_price > 0 ? (
+                        <EscPreviewTable basePrice={r.base_price} streamKey={escStream}
+                          manualRates={manualRates} highlightFY={highlightFY}/>
+                      ) : (
+                        <div className="text-gray-400 text-[10px] italic py-4 text-center">No base price set</div>
+                      )}
+                      <div className="text-[9px] text-gray-400 mt-2">
+                        IET Escalation sheet rates: Materials 4.9/4.0/4.0/4.0% | Contractors 4.9/4.5/4.0/3.5% | EE Internal 4.5/3.8/3.5/3.5% (FY27-FY30)
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB: Item details */}
+                  {itemTab === "details" && (
+                    <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-y border border-gray-100">
+                      <div className="p-3 bg-blue-50/60 col-span-2">
+                        <div className="text-[10px] text-gray-500 uppercase font-semibold mb-2 border-b pb-1">Pricing (base -- not escalated)</div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                          <div>
+                            <div className="text-[10px] text-gray-400">Base contract price</div>
+                            <div className="font-bold text-blue-800 text-sm">{fmtPrice(r.base_price)}</div>
+                            <div className="text-[10px] text-gray-400">as at {r.price_date||"unknown"}</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400">Single-rate esc.</div>
+                            <div className="font-bold text-purple-700 text-sm">{r.esc_rate != null ? (r.esc_rate*100).toFixed(1)+"%" : "--"}</div>
+                            <div className="text-[10px] text-gray-400">legacy compound</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-gray-400">Stored escalated cost</div>
+                            <div className={`font-bold text-sm ${isStale?"text-amber-700":"text-green-800"}`}>{fmtPrice(esc)}</div>
+                            <div className="text-[10px] text-gray-400">
+                              {age != null ? `${age.toFixed(1)} yr${age>=2?" old":""}` : "no date set"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3 col-span-2">
+                        <div className="text-[10px] text-gray-500 uppercase font-semibold mb-2 border-b pb-1">Item Details</div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                          {[
+                            ["Category",        r.category],
+                            ["Family/Voltage",   r.family],
+                            ["Make",             r.make],
+                            ["Model",            r.model],
+                            ["Contract No.",     r.contract_no],
+                            ["Item No.",         r.item_no],
+                            ["Drawing No.",      r.drawing_no],
+                            ["Lead Time",        r.lead_weeks ? r.lead_weeks + " weeks" : null],
+                            ["Unit",             r.unit],
+                          ].filter(([,v]) => v).map(([label, val]) => (
+                            <div key={label} className="flex gap-1">
+                              <span className="text-gray-400 flex-shrink-0 w-24">{label}:</span>
+                              <span className="text-gray-700 font-medium">{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {(r.comments || r.price_comments) && (
+                        <div className="p-3 col-span-4 bg-amber-50/40">
+                          <div className="text-[10px] text-gray-500 uppercase font-semibold mb-1">Comments / Price Notes</div>
+                          {r.price_comments && <div className="text-gray-700 mb-1">{r.price_comments}</div>}
+                          {r.comments && r.comments !== r.price_comments && <div className="text-gray-500 italic">{r.comments}</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* TAB: Edit price (Manager Mode only) */}
+                  {itemTab === "edit" && isEd && (
+                    <div className="p-3 bg-blue-50 border-t-2 border-blue-400">
+                      <div className="text-[10px] text-blue-700 font-semibold uppercase mb-3">
+                        Edit pricing -- enter the actual contract price. Do not pre-escalate.
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 mb-3">
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-0.5">Base price ($) *</label>
+                          <input type="number" step="0.01" value={editVals.base_price}
+                            onChange={e=>setEditVals(p=>({...p,base_price:e.target.value}))}
+                            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-0.5">Price date *</label>
+                          <input type="date" value={editVals.price_date}
+                            onChange={e=>setEditVals(p=>({...p,price_date:e.target.value}))}
+                            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-0.5">Single-rate esc. % (legacy)</label>
+                          <input type="number" step="0.1" min="0" max="50" value={editVals.esc_rate}
+                            onChange={e=>setEditVals(p=>({...p,esc_rate:e.target.value}))}
+                            className="w-full border-2 border-purple-400 rounded px-2 py-1 text-xs focus:outline-none"/>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-500 block mb-0.5">Price notes</label>
+                          <input type="text" value={editVals.comments}
+                            onChange={e=>setEditVals(p=>({...p,comments:e.target.value}))}
+                            className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none"/>
+                        </div>
+                      </div>
+                      {editVals.base_price && parseFloat(editVals.base_price) > 0 && (
+                        <div className="mb-3 border border-purple-200 rounded bg-white p-2">
+                          <div className="text-[10px] font-semibold text-purple-700 mb-2">
+                            Escalation preview -- how this new price projects forward
+                          </div>
+                          <div className="mb-2 p-2 bg-gray-50 border border-gray-100 rounded">
+                            <EscStreamSelector streamKey={editEscStream} setStreamKey={setEditEscStream}
+                              manualRates={editManualRates} setManualRates={setEditManualRates} compact={true}/>
+                          </div>
+                          <EscPreviewTable basePrice={parseFloat(editVals.base_price)}
+                            streamKey={editEscStream} manualRates={editManualRates} highlightFY={highlightFY}/>
+                          <div className="text-[9px] text-gray-400 mt-1">
+                            Preview only -- actual engine escalation depends on project timeline.
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <button onClick={()=>saveEdit(r.wbs_code)}
+                          className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-1.5 rounded font-bold">Save Changes</button>
+                        <button onClick={()=>setEditingKey(null)}
+                          className="border border-gray-300 text-gray-600 text-xs px-3 py-1.5 rounded hover:bg-gray-50">Cancel</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -7368,14 +7619,15 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
         )}
       </div>
 
-      {/* ── Footer ── */}
+      {/* Footer */}
       <div className="flex-shrink-0 border-t bg-gray-50 px-3 py-1.5 flex items-center gap-4 text-[10px] text-gray-500 flex-wrap">
-        <span><span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold border border-blue-200">PCE</span> Period Contract / LLT — Col 12 "Current Price" is the master field</span>
-        <span><span className="bg-purple-100 text-purple-800 px-1 rounded font-semibold border border-purple-200">SCADA</span> SCADA BOM — Col 6 "Cost" is the master field</span>
-        <span><span className="bg-teal-100 text-teal-800 px-1 rounded font-semibold border border-teal-200">Comms</span> Comms Price List — Col 6 "Rate/Cost" is the master field</span>
-        <span className="text-amber-700">⚠️ Amber = &gt;2 yr old</span>
+        <span><span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold border border-blue-200">PCE</span> Period Contract</span>
+        <span><span className="bg-purple-100 text-purple-800 px-1 rounded font-semibold border border-purple-200">SCADA</span> SCADA BOM</span>
+        <span><span className="bg-teal-100 text-teal-800 px-1 rounded font-semibold border border-teal-200">Comms</span> Comms Price List</span>
+        <span className="text-amber-700">Amber = &gt;2yr old</span>
+        <span className="text-gray-400">Hist = price history | Esc = escalation preview</span>
         {editedCount > 0 && (
-          <span className="ml-auto text-orange-600 font-semibold">⚡ {editedCount} prices edited this session — for permanent update, raise a WBS governance change</span>
+          <span className="ml-auto text-orange-600 font-semibold">{editedCount} prices edited this session -- raise WBS governance change for permanent update</span>
         )}
       </div>
     </div>
