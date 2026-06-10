@@ -9823,7 +9823,7 @@ export default function App() {
     .catch(err=>{setError(err.message);setLoading(false);});
   },[]);
 
-  const saveInvestment = useCallback(()=>{\
+  const saveInvestment = useCallback(()=>{
     const supply = supplyData;
     const entered = supply.filter(s=>parseFloat(lines[s.wbs_code]?.qty||"0")>0);
     const totals = entered.reduce((a,item)=>{
