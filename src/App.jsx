@@ -1959,10 +1959,8 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                     {isExp && (
                       <div className="mx-3 mb-3 rounded-lg border border-purple-200 bg-white shadow-sm overflow-hidden">
                         <div className="bg-purple-700 text-white text-xs font-semibold px-3 py-1.5 flex items-center justify-between">
-                          <span>Install Detail — {inst.wbs_code}</span>
-                          {!resourceUnlocked
-                            ? <button onClick={()=>setShowResourcePin(true)} className="text-[10px] bg-purple-900 hover:bg-purple-800 text-purple-200 px-2 py-0.5 rounded">🔒 Unlock to override</button>
-                            : <span className="text-[10px] text-orange-300">🔓 Override enabled</span>}
+                          <span>Install derivation — {inst.wbs_code}</span>
+                          <span className="text-purple-300 text-[10px]">Read-only · overrides via Review Lines</span>
                         </div>
                         <div className="p-3 space-y-3">
                           <div>
@@ -2075,11 +2073,6 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               </div>
                             );
                           })()}
-                          <div className="bg-purple-50 border border-purple-200 rounded p-2.5 grid grid-cols-3 gap-3 text-xs">
-                            <div className="text-center"><div className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Active Hrs</div><div className={`font-bold text-lg ${agg.isOverridden?"text-orange-600":"text-purple-700"}`}>{agg.activeHrs.toFixed(1)}</div><div className="text-[10px] text-gray-400">{agg.isOverridden?"manual":"auto"}</div></div>
-                            <div className="text-center"><div className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">EE Internal</div><div className="font-bold text-blue-800">{fmt(agg.eeInt)}</div><div className="text-[10px] text-gray-400">{agg.isContr?"contractor":"EE labour"}</div></div>
-                            <div className="text-center"><div className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Commercial</div><div className="font-bold text-orange-700">{fmt(agg.comm)}</div></div>
-                          </div>
                         </div>
                       </div>
                     )}
