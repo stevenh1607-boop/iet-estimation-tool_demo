@@ -1605,12 +1605,14 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                   <div className="text-center text-gray-500">{item.uom||"EA"}</div>
                   <div className="flex justify-center">
                     <input type="number" min="0" value={qty} onChange={e=>updLine(item.wbs_code,"qty",e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                       placeholder="0"
                       className={`w-16 text-center border rounded py-0.5 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-orange-400 ${hasQty?"border-orange-400 bg-orange-50 text-orange-800":"border-gray-300 text-gray-500"}`}/>
                   </div>
                   <div className="flex justify-center">
                     <input type="number" min="0.1" step="0.1" value={factor}
                       onChange={e=>updLine(item.wbs_code,"factor",e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                       className={`w-14 text-center border rounded py-0.5 text-xs focus:outline-none focus:ring-1 ${parseFloat(factor)!==1?"border-blue-400 bg-blue-50 text-blue-800 font-bold":"border-gray-200 text-gray-500"}`}/>
                   </div>
                   <div className="text-center">
@@ -1728,6 +1730,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           {isWAFHAItem(item) && <div className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1">WAFHA — day-rated, no install hrs override</div>}
                           {!isWAFHAItem(item) && <input type="number" min="0" value={ln.instHrsOvrd||""} placeholder={String(item.install_hrs_per||0)}
                             onChange={e=>updLine(item.wbs_code,"instHrsOvrd",e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                             className="w-full text-xs border border-purple-300 bg-purple-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400"/>}
                         </div>
                         <div>
@@ -1746,6 +1749,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               <input type="number" min="0" value={ln.contrRate||""}
                                 placeholder={item.contractor_rate>0?String(Math.round(item.contractor_rate)):"0"}
                                 onChange={e=>updLine(item.wbs_code,"contrRate",e.target.value)}
+                                onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                                 className="w-full text-xs border border-teal-300 bg-teal-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-400"/>
                               {item.contractor_rate>0&&<div className="text-xs text-amber-600 mt-0.5">Default: ${Math.round(item.contractor_rate).toLocaleString("en-AU")}</div>}
                             </>
@@ -1765,6 +1769,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <input type="number" min="0" value={ln.mats||""} placeholder={item.pce_price>0?item.pce_price.toFixed(2):"0"}
                           title={item._priceFromEquipPricing?"Price updated from Equipment Pricing this session":""}
                             onChange={e=>updLine(item.wbs_code,"mats",e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                             className="w-full text-xs border border-green-300 bg-green-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-green-400"/>
                           {item.pce_price>0&&<div className="text-xs text-amber-600 mt-0.5">PCE default: {fmt(item.pce_price)}</div>}
                         </div>
@@ -1772,6 +1777,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <label className="text-xs text-gray-500 block mb-0.5">Plant & Machinery ($)</label>
                           <input type="number" min="0" value={ln.plant||""} placeholder="0"
                             onChange={e=>updLine(item.wbs_code,"plant",e.target.value)}
+                            onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
                             className="w-full text-xs border border-blue-200 bg-blue-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
                         </div>
                         {hasQty && (
@@ -6270,6 +6276,351 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// WBS LINK INTEGRITY PANEL
+// ═══════════════════════════════════════════════════════════════════
+function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
+  const [activeSection, setActiveSection] = useState("install");
+  const [lastRun, setLastRun] = useState(null);
+  const [runCount, setRunCount] = useState(0);
+
+  // Build lookup maps from WBS data
+  const checks = useMemo(() => {
+    if (!wbs || !wbs.length) return null;
+    const allWbsCodes = new Set(wbs.map(r=>r.wbs_code));
+    const installWbs  = new Set(wbs.filter(r=>r.scope==="Install").map(r=>r.wbs_code));
+    const commWbs     = new Set(wbs.filter(r=>r.scope==="Commission").map(r=>r.wbs_code));
+    const hrsMap      = Object.fromEntries(wbs.map(r=>[r.wbs_code, r.install_hrs_per ?? r.ee_unit_hrs ?? null]));
+
+    // Supply rows from supply data (which has install_wbs and commission_wbs links)
+    const supplyRows = supply || [];
+
+    // CHECK-01: broken install link targets
+    const brokenInstall = supplyRows.filter(s=>
+      s.install_wbs && !allWbsCodes.has(s.install_wbs)
+    ).map(s=>({wbs_code:s.wbs_code, description:s.description, linked:s.install_wbs, issue:"Target WBS not found"}));
+
+    // CHECK-02: install link pointing to non-Install scope
+    const wrongScopeInstall = supplyRows.filter(s=>
+      s.install_wbs && allWbsCodes.has(s.install_wbs) && !installWbs.has(s.install_wbs)
+    ).map(s=>({wbs_code:s.wbs_code, description:s.description, linked:s.install_wbs, issue:"Target is not Install scope"}));
+
+    // CHECK-03: install rows with null/zero hours (from wbs data, scope=Install, has L6 code)
+    const installNullHrs = wbs.filter(r=>{
+      if (r.scope !== "Install") return false;
+      const parts = (r.wbs_code||"").split(".");
+      if (parts.length < 6) return false; // group headers only
+      const hrs = r.install_hrs_per ?? r.ee_unit_hrs ?? null;
+      return hrs === null || hrs === undefined || Number(hrs) === 0;
+    });
+
+    // CHECK-04: commission rows with null/zero hours (L6, scope=Commission)
+    // Split: misc rows (approved to stay null) vs unexpected
+    const MISC_COMM_PREFIX = "4.1.6.06.7"; // Miscellaneous works — intentionally null, user-entered
+    const SCADA_RTU_PANEL  = ["4.1.6.02.7.01","4.1.6.02.7.02"]; // SCADA RTU panel rows — also intentional
+    const commNullHrs = wbs.filter(r=>{
+      if (r.scope !== "Commission") return false;
+      const parts = (r.wbs_code||"").split(".");
+      if (parts.length < 6) return false;
+      const hrs = r.install_hrs_per ?? r.ee_unit_hrs ?? null;
+      return hrs === null || hrs === undefined || Number(hrs) === 0;
+    });
+
+    // Separate misc (intentionally null) from unexpected
+    const miscCommNull    = commNullHrs.filter(r=>r.wbs_code.startsWith(MISC_COMM_PREFIX)||SCADA_RTU_PANEL.includes(r.wbs_code));
+    const unexpCommNull   = commNullHrs.filter(r=>!r.wbs_code.startsWith(MISC_COMM_PREFIX)&&!SCADA_RTU_PANEL.includes(r.wbs_code));
+
+    // CHECK-05: supply with install but no commission (phase 3 active equipment)
+    const PASSIVE_PREFIXES = ["3.1.3.12","3.1.3.15","3.1.3.16","3.1.3.17","3.1.3.13","3.2.1.07","3.2.2.03","3.3.1.09","3.3.1.10","3.3.1.11","3.3.1.13","3.3.1.14","3.3.1.06","3.3.1.04","3.1.2.02"];
+    const installNoComm = supplyRows.filter(s=>{
+      if (!s.install_wbs || s.commission_wbs) return false;
+      const wbsc = s.wbs_code || "";
+      if (!["3.1.3","3.1.5","3.2.1","3.2.2","3.5.1"].some(p=>wbsc.startsWith(p))) return false;
+      if (PASSIVE_PREFIXES.some(p=>wbsc.startsWith(p))) return false;
+      return true;
+    }).map(s=>({wbs_code:s.wbs_code, description:s.description, linked:s.install_wbs, issue:"Has install link but no commission link"}));
+
+    return {
+      brokenInstall, wrongScopeInstall, installNullHrs,
+      miscCommNull, unexpCommNull, installNoComm,
+      totalIssues: brokenInstall.length + wrongScopeInstall.length + unexpCommNull.length,
+      totalWarnings: installNullHrs.length + installNoComm.length,
+    };
+  }, [wbs, supply, runCount]);
+
+  const runTest = () => { setLastRun(new Date()); setRunCount(c=>c+1); };
+
+  if (!wbs || !wbs.length) return (
+    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Loading WBS data…</div>
+  );
+
+  const C = checks;
+  const allClear = C.totalIssues === 0;
+
+  const Pill = ({n,type})=>{
+    const cls = type==="ok"?"bg-green-100 text-green-700":type==="warn"?"bg-amber-100 text-amber-700":"bg-red-100 text-red-700";
+    return <span className={`text-xs font-mono px-2 py-0.5 rounded-full font-semibold ${cls}`}>{n}</span>;
+  };
+
+  const sections = [
+    {id:"install",  label:"Install hrs gaps",     count:C.installNullHrs.length,   type: C.installNullHrs.length>0?"warn":"ok"},
+    {id:"comm",     label:"Commission hrs gaps",   count:C.miscCommNull.length+C.unexpCommNull.length, type: C.unexpCommNull.length>0?"err":"ok"},
+    {id:"nocomm",   label:"No commission link",    count:C.installNoComm.length,    type: C.installNoComm.length>0?"warn":"ok"},
+    {id:"broken",   label:"Broken link targets",   count:C.brokenInstall.length+C.wrongScopeInstall.length, type: (C.brokenInstall.length+C.wrongScopeInstall.length)>0?"err":"ok"},
+  ];
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
+      {/* Header toolbar */}
+      <div className="bg-white border-b px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
+        <button onClick={runTest}
+          className="text-xs px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded font-semibold flex items-center gap-1.5">
+          🔍 Run checks
+        </button>
+        {lastRun && <span className="text-xs text-gray-400">Last run: {lastRun.toLocaleTimeString("en-AU")}</span>}
+        <div className="flex-1"/>
+        <div className={`text-xs font-semibold px-3 py-1.5 rounded ${allClear?"bg-green-100 text-green-700":"bg-red-100 text-red-700"}`}>
+          {allClear?"✓ All critical checks pass":`⚠ ${C.totalIssues} issue${C.totalIssues!==1?"s":""} · ${C.totalWarnings} warning${C.totalWarnings!==1?"s":""}`}
+        </div>
+      </div>
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left nav */}
+        <div className="w-52 bg-white border-r flex-shrink-0 flex flex-col pt-2">
+          {sections.map(s=>(
+            <button key={s.id} onClick={()=>setActiveSection(s.id)}
+              className={`text-left px-4 py-2.5 text-xs flex items-center justify-between gap-2 border-l-2 transition-colors
+                ${activeSection===s.id?"border-blue-600 bg-blue-50 text-blue-800 font-semibold":"border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-800"}`}>
+              <span>{s.label}</span>
+              <Pill n={s.count} type={s.type==="err"?"err":s.type==="warn"?"warn":"ok"}/>
+            </button>
+          ))}
+          <div className="mt-4 mx-3 border-t pt-3">
+            <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-2">Legend</div>
+            <div className="space-y-1.5 text-xs text-gray-500">
+              <div><span className="inline-block w-2 h-2 rounded-full bg-red-400 mr-1.5"></span>Critical — fix before go-live</div>
+              <div><span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1.5"></span>Warning — needs review</div>
+              <div><span className="inline-block w-2 h-2 rounded-full bg-green-400 mr-1.5"></span>Pass</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="flex-1 overflow-y-auto p-4">
+
+          {/* INSTALL NULL HRS */}
+          {activeSection==="install"&&(
+            <div>
+              <div className="mb-3">
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-03 · Install rows with no standard hours</div>
+                <div className="text-xs text-gray-500">Install WBS line items (L6) with null or zero ee_unit_hrs. These rows cannot auto-calculate EE labour cost. Civil earthworks and OPGW stringing hours need to be agreed with the relevant team.</div>
+              </div>
+              {C.installNullHrs.length===0?(
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">✓ All install rows have standard hours set</div>
+              ):(
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">WBS Code</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">Hrs</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">Approved null</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Action</th>
+                  </tr></thead>
+                  <tbody>
+                    {C.installNullHrs.map(r=>{
+                      const approved = !!nullApproved[r.wbs_code];
+                      return (
+                        <tr key={r.wbs_code} className={`border-b border-gray-100 ${approved?"opacity-50":""}`}>
+                          <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                          <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                          <td className="py-1.5 px-2 text-center"><span className="text-amber-600 font-semibold">null</span></td>
+                          <td className="py-1.5 px-2 text-center">
+                            <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved(r.wbs_code)}
+                              className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                          </td>
+                          <td className="py-1.5 px-2 text-gray-400">{approved?"Acknowledged — no action needed":"Agree hrs with team lead"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* COMMISSION NULL HRS */}
+          {activeSection==="comm"&&(
+            <div className="space-y-6">
+              {/* Unexpected null hrs */}
+              <div>
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-04a · Commission rows with unexpected null hours</div>
+                <div className="text-xs text-gray-500 mb-3">Commission WBS line items (L6) with null hours that are NOT in the approved-null category. These need a decision: set a standard rate, or mark as approved for null.</div>
+                {C.unexpCommNull.length===0?(
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">✓ No unexpected null commission hours</div>
+                ):(
+                  <table className="w-full text-xs border-collapse">
+                    <thead><tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">WBS Code</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                      <th className="text-center py-2 px-2 text-gray-500 font-medium">Approved null</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Action</th>
+                    </tr></thead>
+                    <tbody>
+                      {C.unexpCommNull.map(r=>{
+                        const approved = !!nullApproved[r.wbs_code];
+                        return (
+                          <tr key={r.wbs_code} className={`border-b border-gray-100 ${approved?"opacity-50":""}`}>
+                            <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                            <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                            <td className="py-1.5 px-2 text-center">
+                              <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved(r.wbs_code)}
+                                className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                            </td>
+                            <td className="py-1.5 px-2 text-gray-400">{approved?"Acknowledged":"Set standard hrs or approve as null"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Misc slots — intentionally null */}
+              <div>
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-04b · Miscellaneous & SCADA RTU panel rows <span className="text-xs font-normal text-gray-400 ml-1">— approved to remain null (user-entered)</span></div>
+                <div className="text-xs text-gray-500 mb-3">These rows are intentionally null because hours vary per investment and are entered by the estimator at the time of estimation. No action needed — use the checkbox to acknowledge if needed.</div>
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">WBS Code</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">Acknowledged</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Type</th>
+                  </tr></thead>
+                  <tbody>
+                    {C.miscCommNull.map(r=>{
+                      const approved = !!nullApproved[r.wbs_code];
+                      const isMisc = r.wbs_code.startsWith("4.1.6.06");
+                      return (
+                        <tr key={r.wbs_code} className="border-b border-gray-100">
+                          <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                          <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                          <td className="py-1.5 px-2 text-center">
+                            <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved(r.wbs_code)}
+                              className="w-3.5 h-3.5 accent-green-600 cursor-pointer"/>
+                          </td>
+                          <td className="py-1.5 px-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${isMisc?"bg-gray-100 text-gray-600":"bg-blue-100 text-blue-700"}`}>
+                              {isMisc?"Misc slot — estimator enters":"SCADA RTU panel"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* INSTALL NO COMMISSION */}
+          {activeSection==="nocomm"&&(
+            <div>
+              <div className="mb-3">
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-05 · Phase 3 active equipment — install link set but no commission link</div>
+                <div className="text-xs text-gray-500">These supply items in active-equipment categories have an install link but no commission_wbs set. Passive/structural items are excluded. Confirm with stakeholders whether a commission WBS row is needed for each.</div>
+              </div>
+              {C.installNoComm.length===0?(
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">✓ No unexpected gaps found</div>
+              ):(
+                <table className="w-full text-xs border-collapse">
+                  <thead><tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Supply WBS</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Install link</th>
+                    <th className="text-center py-2 px-2 text-gray-500 font-medium">Approved no-comm</th>
+                  </tr></thead>
+                  <tbody>
+                    {C.installNoComm.map(r=>{
+                      const approved = !!nullApproved["nocomm_"+r.wbs_code];
+                      return (
+                        <tr key={r.wbs_code} className={`border-b border-gray-100 ${approved?"opacity-50":""}`}>
+                          <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                          <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                          <td className="py-1.5 px-2 font-mono text-purple-600">{r.linked}</td>
+                          <td className="py-1.5 px-2 text-center">
+                            <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved("nocomm_"+r.wbs_code)}
+                              className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* BROKEN LINKS */}
+          {activeSection==="broken"&&(
+            <div className="space-y-6">
+              <div>
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-01 · Install link target not found</div>
+                <div className="text-xs text-gray-500 mb-3">Supply rows whose install_wbs value does not match any WBS code in the master list. Critical — hours cannot calculate.</div>
+                {C.brokenInstall.length===0?(
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">✓ All install link targets exist</div>
+                ):(
+                  <table className="w-full text-xs border-collapse">
+                    <thead><tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Supply WBS</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Broken link target</th>
+                    </tr></thead>
+                    <tbody>
+                      {C.brokenInstall.map(r=>(
+                        <tr key={r.wbs_code} className="border-b border-gray-100">
+                          <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                          <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                          <td className="py-1.5 px-2 font-mono text-red-600">{r.linked}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+              <div>
+                <div className="font-semibold text-sm text-gray-800 mb-1">CHECK-02 · Install link pointing to wrong scope</div>
+                {C.wrongScopeInstall.length===0?(
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-sm text-green-700">✓ All install link targets have correct scope</div>
+                ):(
+                  <table className="w-full text-xs border-collapse">
+                    <thead><tr className="border-b border-gray-200">
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Supply WBS</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Description</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Link</th>
+                      <th className="text-left py-2 px-2 text-gray-500 font-medium">Issue</th>
+                    </tr></thead>
+                    <tbody>
+                      {C.wrongScopeInstall.map(r=>(
+                        <tr key={r.wbs_code} className="border-b border-gray-100">
+                          <td className="py-1.5 px-2 font-mono text-gray-600">{r.wbs_code}</td>
+                          <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
+                          <td className="py-1.5 px-2 font-mono text-amber-700">{r.linked}</td>
+                          <td className="py-1.5 px-2 text-red-600">{r.issue}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
   const {wbs:wbsCtx, supply, rates, loading, error} = useData();
   const [tab,          setTab]         = useState("items");
@@ -6295,6 +6646,18 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
   const [pinInput,     setPinInput]    = useState("");
   const [pinError,     setPinError]    = useState(false);
   const pinRef = useRef(null);
+
+  // ── NULL-HRS APPROVED STATE ──
+  const [nullApproved, setNullApproved] = useState(()=>{
+    try{ const r=localStorage.getItem("iet_null_approved"); return r?JSON.parse(r):{}; }catch(e){return {};}
+  });
+  const toggleNullApproved = (wbsCode) => {
+    setNullApproved(prev=>{
+      const next={...prev,[wbsCode]:!prev[wbsCode]};
+      localStorage.setItem("iet_null_approved",JSON.stringify(next));
+      return next;
+    });
+  };
 
   // ── WBS EDIT STATE ──
   const [wbsOverrides, setWbsOverrides] = useState({}); // {wbs_code: {description, scope}}
@@ -6382,6 +6745,7 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
     {id:"escalation", label:"📈 Escalation Rates",     count:null},
     {id:"scaling",    label:"📐 Comm Scaling",          count:WBS_PROFILES.length},
     {id:"people",     label:"👥 People & Roles",        count:people.filter(p=>p.active).length},
+    {id:"integrity",  label:"🔍 Link Integrity",        count:null},
   ];
 
   return (
@@ -6504,6 +6868,11 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
       {/* Commissioning Scaling */}
       {tab==="scaling"&&(
         <ScalingEditor managerMode={managerMode} onUnlock={()=>setShowPinModal(true)}/>
+      )}
+
+      {/* Link Integrity Test */}
+      {tab==="integrity"&&(
+        <WBSIntegrityPanel wbs={wbs} supply={supply} nullApproved={nullApproved} toggleNullApproved={toggleNullApproved}/>
       )}
 
       {/* People & Roles */}
