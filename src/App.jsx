@@ -10281,6 +10281,10 @@ export default function App() {
   // Commercial rates only apply to Commercially Funded investments
   const isCommercial = inv.type === "Commercially Funded";
   const [lastSaved,   setLastSaved]   = useState(null);
+  // Change log — tracks edits to estimate lines & investment setup (declared
+  // here, ahead of saveInvestment, since it's referenced in its deps array)
+  const [changeLog, setChangeLog] = useState([]);
+  const [showChangeLog, setShowChangeLog] = useState(false);
 
   // Track the portfolio record ID currently loaded (null = new/unsaved)
   const [currentRecordId, setCurrentRecordId] = useState(null);
@@ -10562,8 +10566,6 @@ export default function App() {
   },[inv, lines, currentRecordId]);
   // ── Change log — tracks edits to estimate lines & investment setup ──
   // Stored with the saved record so it survives reload/re-open.
-  const [changeLog, setChangeLog] = useState([]);
-  const [showChangeLog, setShowChangeLog] = useState(false);
   const FIELD_LABELS = {
     qty:"Quantity", factor:"Factor", delivery:"Delivery", instHrsOvrd:"Install Hrs (override)",
     contrRate:"Contractor Rate", plant:"Plant Cost", mats:"Materials Cost", resourceOvrd:"Resource Override",
