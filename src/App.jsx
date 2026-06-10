@@ -6951,63 +6951,53 @@ const WIZ_STEPS = [
 
 const WIZ_PIN = "1607";
 
-function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
-  const [step,      setStep]      = useState(0);
-  const [pinInput,  setPinInput]  = useState("");
-  const [pinError,  setPinError]  = useState(false);
-  const [saved,     setSaved]     = useState(false);
-  const [govRef,    setGovRef]    = useState("");
+function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
+  const [step,       setStep]       = useState(0);
+  const [pinInput,   setPinInput]   = useState("");
+  const [pinError,   setPinError]   = useState(false);
+  const [saved,      setSaved]      = useState(false);
+  const [govRef,     setGovRef]     = useState("");
 
   // Step 1 — hierarchy
-  const [parentNode,    setParentNode]    = useState("");
-  const [deviceCode,    setDeviceCode]    = useState("");
-  const [deviceDesc,    setDeviceDesc]    = useState("");
-  const [scopePattern,  setScopePattern]  = useState("standard");
+  const [parentNode,   setParentNode]   = useState("");
+  const [deviceCode,   setDeviceCode]   = useState("");
+  const [deviceDesc,   setDeviceDesc]   = useState("");
+  const [scopePattern, setScopePattern] = useState("standard");
+  const [itemNo,       setItemNo]       = useState("01");
 
   // Step 2 — supply item
-  const [supplyDesc,    setSupplyDesc]    = useState(prefill?.description || "");
-  const [aer,           setAer]           = useState("R2a -- Network Planner / SCADA Designer");
-  const [delivery,      setDelivery]      = useState("Contractor Delivered");
-  const [make,          setMake]          = useState(prefill?.make_model || "");
-  const [price,         setPrice]         = useState(prefill?.price ? String(prefill.price) : "");
-  const [isLLT,         setIsLLT]         = useState(false);
-  const [itemNo,        setItemNo]        = useState("01");
+  const [supplyDesc, setSupplyDesc] = useState((prefill && prefill.description) || "");
+  const [aer,        setAer]        = useState("Contractor - Electrical");
+  const [delivery,   setDelivery]   = useState("Contractor Delivered");
+  const [make,       setMake]       = useState((prefill && prefill.make_model) || "");
+  const [price,      setPrice]      = useState((prefill && prefill.price) ? String(prefill.price) : "");
+  const [isLLT,      setIsLLT]      = useState(false);
 
   // Step 3 — hours
-  const [installCrew,   setInstallCrew]   = useState("2");
-  const [installHrs,    setInstallHrs]    = useState("8");
-  const [commHrs,       setCommHrs]       = useState("4");
-  const [scalingProfile,setScalingProfile]= useState("HV Plant Outdoor");
+  const [installCrew,    setInstallCrew]    = useState("2");
+  const [installHrs,     setInstallHrs]     = useState("8");
+  const [commHrs,        setCommHrs]        = useState("4");
+  const [scalingProfile, setScalingProfile] = useState("HV Plant Outdoor");
 
-  // Derived WBS codes
-  const supplyCode  = deviceCode.trim() ? `${deviceCode.trim()}.1.${itemNo}` : "";
-  const installCode = deviceCode.trim() ? `${deviceCode.trim()}.4.${itemNo}` : "";
-  const commCode    = deviceCode.trim()
-    ? (scopePattern === "standard" || scopePattern === "scada")
-        ? `${deviceCode.trim().replace(/^(\d+\.\d+\.\d+)/, m => {
-            const parts = m.split(".");
-            return `4.${parts[1]}.${parts[2]}`;
-          })}.7.${itemNo}`
-        : ""
-    : "";
+  const supplyCode  = deviceCode.trim() ? deviceCode.trim() + ".1." + itemNo : "";
+  const installCode = deviceCode.trim() ? deviceCode.trim() + ".4." + itemNo : "";
+  const commCode    = (deviceCode.trim() && (scopePattern === "standard" || scopePattern === "scada"))
+    ? deviceCode.trim() + ".7." + itemNo : "";
 
-  const installHrsTotal = (parseFloat(installCrew)||0) * (parseFloat(installHrs)||0);
+  const installHrsTotal = (parseFloat(installCrew) || 0) * (parseFloat(installHrs) || 0);
   const commHrsTotal    = parseFloat(commHrs) || 0;
 
-  const dupSupply   = supplyCode  && existingCodes && existingCodes.has(supplyCode);
-  const dupInstall  = installCode && existingCodes && existingCodes.has(installCode);
+  const dupSupply = supplyCode && existingCodes && existingCodes.has(supplyCode);
 
-  // Rows that will be created
   const willCreate = () => {
     const rows = [];
-    if (supplyCode) rows.push({ code: supplyCode,  scope:"Supply",     desc: supplyDesc || deviceDesc, hrs: null });
+    if (supplyCode) rows.push({ code: supplyCode,  scope: "Supply",     desc: supplyDesc || deviceDesc, hrs: null });
     if (installCode && scopePattern !== "supplyonly" && scopePattern !== "combined")
-      rows.push({ code: installCode, scope:"Install",    desc: `${supplyDesc||deviceDesc} -- install`, hrs: installHrsTotal });
-    if (commCode && (scopePattern === "standard" || scopePattern === "scada"))
-      rows.push({ code: commCode,    scope:"Commission", desc: `${supplyDesc||deviceDesc} -- commission`, hrs: commHrsTotal });
+      rows.push({ code: installCode, scope: "Install",    desc: (supplyDesc || deviceDesc) + " -- install", hrs: installHrsTotal });
+    if (commCode)
+      rows.push({ code: commCode,    scope: "Commission", desc: (supplyDesc || deviceDesc) + " -- commission", hrs: commHrsTotal });
     return rows;
   };
-
   const rows = willCreate();
 
   const canNext = () => {
@@ -7020,41 +7010,33 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
   const trySubmit = () => {
     if (pinInput !== WIZ_PIN) { setPinError(true); setPinInput(""); return; }
     setPinError(false);
-    // Build supply entries for each row
     const entries = rows.map(r => ({
-      wbs_code:        r.code,
-      l4_group:        deviceCode.trim(),
-      description:     r.desc,
-      scope:           r.scope,
-      delivery_method: delivery,
-      resource_main:   aer,
-      uom:             "each",
-      ee_unit_hrs:     r.scope === "Install"     ? installHrsTotal : r.scope === "Commission" ? commHrsTotal : null,
-      pce_price:       r.scope === "Supply"      ? (parseFloat(price)||null) : null,
-      install_wbs:     supplyCode || "",
-      commission_wbs:  commCode || "",
-      _pending_governance: true,
-      _gov_ref:        govRef,
-      _wizard:         true,
+      wbs_code: r.code, l4_group: deviceCode.trim(),
+      description: r.desc, scope: r.scope,
+      delivery_method: delivery, resource_main: aer, uom: "each",
+      ee_unit_hrs: r.scope === "Install" ? installHrsTotal : r.scope === "Commission" ? commHrsTotal : null,
+      pce_price:   r.scope === "Supply"  ? (parseFloat(price) || null) : null,
+      install_wbs: supplyCode, commission_wbs: commCode,
+      _pending_governance: true, _gov_ref: govRef, _wizard: true,
     }));
     if (onSave) onSave(entries);
     setSaved(true);
   };
 
-  const fmtHrs = (h) => h > 0 ? `${h} hrs/unit` : "--";
+  const fmtHrs = (h) => h > 0 ? h + " hrs/unit" : "--";
 
-  const STEP_CLS = (i) =>
-    i < step  ? "bg-green-600 text-white border-green-600"
-    : i === step ? "bg-blue-600 text-white border-blue-600"
-    :              "bg-white text-gray-400 border-gray-200";
+  const STEP_CLS = (idx) =>
+    idx < step  ? "bg-green-600 text-white border-green-600"
+    : idx === step ? "bg-blue-600 text-white border-blue-600"
+    :               "bg-white text-gray-400 border-gray-200";
 
   if (saved) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div className="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4 text-center">
-        <div className="text-4xl mb-3">✓</div>
+        <div className="text-4xl mb-3">&#10003;</div>
         <div className="text-lg font-bold text-green-800 mb-2">WBS items created</div>
-        <div className="text-sm text-gray-600 mb-2">{rows.length} row{rows.length!==1?"s":""} saved in <span className="font-semibold text-amber-700">Pending Governance</span> state.</div>
-        <div className="text-xs text-gray-400 mb-4">Items will appear in the WBS editor marked pending. They cannot be used in estimates until the WBS Manager confirms governance sign-off.</div>
+        <div className="text-sm text-gray-600 mb-2">{rows.length} row{rows.length !== 1 ? "s" : ""} saved as <span className="font-semibold text-amber-700">Pending Governance</span>.</div>
+        <div className="text-xs text-gray-400 mb-4">Items will appear in the WBS editor marked pending. Cannot be used in estimates until WBS Manager confirms governance sign-off.</div>
         {govRef && <div className="text-xs text-blue-600 mb-4">Governance ref: <span className="font-mono font-semibold">{govRef}</span></div>}
         <button onClick={onClose} className="bg-blue-700 hover:bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm">Done</button>
       </div>
@@ -7068,53 +7050,51 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
         {/* Header + stepper */}
         <div className="bg-[#1e3a5f] text-white px-5 py-3 rounded-t-xl flex items-center gap-4 flex-shrink-0">
           <span className="font-semibold text-sm">New WBS item wizard</span>
-          <div className="flex items-center gap-1.5 flex-1">
-            {WIZ_STEPS.map((s, i) => (
-              <React.Fragment key={s.id}>
-                <div className={`flex items-center gap-1.5 text-xs`}>
-                  <div className={`w-5 h-5 rounded-full border flex items-center justify-center text-[10px] font-bold ${STEP_CLS(i)}`}>
-                    {i < step ? "✓" : s.short}
-                  </div>
-                  <span className={i === step ? "text-white font-medium" : "text-blue-300"}>{s.label}</span>
+          <div className="flex items-center gap-2 flex-1 overflow-hidden">
+            {WIZ_STEPS.map((s, idx) => (
+              <div key={s.id} className="flex items-center gap-1 min-w-0">
+                <div className={`w-5 h-5 rounded-full border flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${STEP_CLS(idx)}`}>
+                  {idx < step ? "v" : s.short}
                 </div>
-                {i < WIZ_STEPS.length-1 && <div className="flex-1 h-px bg-blue-700 min-w-[20px]"/>}
-              </React.Fragment>
+                <span className={`text-xs truncate ${idx === step ? "text-white font-medium" : "text-blue-300"}`}>{s.label}</span>
+                {idx < WIZ_STEPS.length - 1 && <div className="w-4 h-px bg-blue-700 flex-shrink-0 ml-1"/>}
+              </div>
             ))}
           </div>
-          <button onClick={onClose} className="text-blue-300 hover:text-white text-lg leading-none ml-2">x</button>
+          <button onClick={onClose} className="text-blue-300 hover:text-white text-lg leading-none ml-2 flex-shrink-0">x</button>
         </div>
 
         {/* Body */}
         <div className="flex flex-1 overflow-hidden">
 
-          {/* Left: context sidebar */}
-          <div className="w-48 flex-shrink-0 bg-gray-50 border-r px-3 py-4 flex flex-col gap-4 overflow-y-auto">
+          {/* Left sidebar */}
+          <div className="w-44 flex-shrink-0 bg-gray-50 border-r px-3 py-4 flex flex-col gap-4 overflow-y-auto">
             <div>
               <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400 mb-2">WBS context</div>
               <div className="text-[10px] text-gray-600 space-y-1">
-                {parentNode && <div><span className="text-gray-400">Parent:</span> <span className="font-mono font-medium">{parentNode}</span></div>}
-                {deviceCode && <div><span className="text-gray-400">L4 code:</span> <span className="font-mono font-medium text-blue-700">{deviceCode}</span></div>}
-                {deviceDesc && <div><span className="text-gray-400">Group:</span> <span className="font-medium">{deviceDesc}</span></div>}
+                {parentNode && <div><span className="text-gray-400">Parent: </span><span className="font-mono font-medium">{parentNode}</span></div>}
+                {deviceCode  && <div><span className="text-gray-400">L4: </span><span className="font-mono font-medium text-blue-700">{deviceCode}</span></div>}
+                {deviceDesc  && <div><span className="text-gray-400">Group: </span><span className="font-medium">{deviceDesc}</span></div>}
               </div>
             </div>
             <div>
               <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400 mb-2">Will create</div>
               <div className="space-y-1.5">
                 {[
-                  { label:"Supply (.1)",     done: step > 0, active: step === 0 },
-                  { label:"Install (.4)",    done: step > 2 && scopePattern !== "supplyonly" && scopePattern !== "combined", active: step === 2, skip: scopePattern === "supplyonly" || scopePattern === "combined" },
-                  { label:"Commission (.7)", done: step > 2 && (scopePattern === "standard" || scopePattern === "scada"), active: step === 2, skip: scopePattern === "supplyonly" },
+                  { label:"Supply (.1)",     active: step > 0, skip: false },
+                  { label:"Install (.4)",    active: step > 2, skip: scopePattern === "supplyonly" || scopePattern === "combined" },
+                  { label:"Commission (.7)", active: step > 2, skip: scopePattern === "supplyonly" },
                 ].map((r, i) => (
-                  <div key={i} className={`flex items-center gap-1.5 text-[10px] ${r.skip?"opacity-30 line-through":""}`}>
-                    <span className={`w-3 h-3 rounded-full flex-shrink-0 border ${r.done?"bg-green-500 border-green-500":r.active?"bg-blue-400 border-blue-400":"bg-white border-gray-300"}`}/>
-                    <span className={r.done?"text-green-700":r.active?"text-blue-700":"text-gray-400"}>{r.label}</span>
+                  <div key={i} className={"flex items-center gap-1.5 text-[10px]" + (r.skip ? " opacity-30 line-through" : "")}>
+                    <span className={"w-3 h-3 rounded-full flex-shrink-0 border " + (r.active ? "bg-green-500 border-green-500" : "bg-white border-gray-300")}/>
+                    <span className={r.active ? "text-green-700" : "text-gray-400"}>{r.label}</span>
                   </div>
                 ))}
               </div>
             </div>
-            {prefill && (
+            {prefill && (prefill.description || prefill.make_model) && (
               <div className="bg-blue-50 border border-blue-200 rounded p-2">
-                <div className="text-[9px] font-semibold uppercase tracking-wide text-blue-600 mb-1">Pre-filled from catalogue</div>
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-blue-600 mb-1">Pre-filled</div>
                 <div className="text-[10px] text-blue-700 space-y-0.5">
                   {prefill.description && <div>{prefill.description}</div>}
                   {prefill.make_model  && <div className="text-gray-500">{prefill.make_model}</div>}
@@ -7124,101 +7104,100 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
             )}
           </div>
 
-          {/* Right: step content */}
+          {/* Step content */}
           <div className="flex-1 overflow-y-auto p-4">
 
-            {/* STEP 1 — Hierarchy */}
+            {/* STEP 1 */}
             {step === 0 && (
-              <div className="space-y-4">
-                <div>
-                  <div className="text-xs font-semibold text-gray-700 mb-3 pb-1.5 border-b">Step 1 -- place in WBS hierarchy</div>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="text-[10px] text-gray-500 block mb-0.5">Parent node (L1-L3) -- optional context</label>
-                      <input value={parentNode} onChange={e=>setParentNode(e.target.value)}
-                        placeholder="e.g. 3.1.3 -- HV plant"
-                        className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"/>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 block mb-0.5">L4 device group code <span className="text-red-400">*</span></label>
-                      <input value={deviceCode} onChange={e=>setDeviceCode(e.target.value)}
-                        placeholder="e.g. 3.1.3.09"
-                        className={`w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 ${dupSupply?"border-red-400 bg-red-50":"focus:ring-blue-400"}`}/>
-                      {dupSupply && <div className="text-[10px] text-red-600 mt-0.5">Supply code already exists</div>}
-                    </div>
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-700 pb-1.5 border-b">Step 1 -- place in WBS hierarchy</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Parent node (optional context)</label>
+                    <input value={parentNode} onChange={e=>setParentNode(e.target.value)}
+                      placeholder="e.g. 3.1.3 -- HV plant"
+                      className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                   </div>
-                  <div className="mb-3">
-                    <label className="text-[10px] text-gray-500 block mb-0.5">Device group description <span className="text-red-400">*</span></label>
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">L4 device group code *</label>
+                    <input value={deviceCode} onChange={e=>setDeviceCode(e.target.value)}
+                      placeholder="e.g. 3.1.3.09"
+                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "focus:ring-blue-400")}/>
+                    {dupSupply && <div className="text-[10px] text-red-600 mt-0.5">Code already exists</div>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Device group description *</label>
                     <input value={deviceDesc} onChange={e=>setDeviceDesc(e.target.value)}
                       placeholder="e.g. 66kV Surge Arresters"
                       className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="text-[10px] text-gray-500 block mb-0.5">Item number suffix</label>
-                      <select value={itemNo} onChange={e=>setItemNo(e.target.value)}
-                        className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
-                        {["01","02","03","04","05","06","07","08","09","10"].map(n=><option key={n}>{n}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-gray-500 block mb-0.5">Derived supply code</label>
-                      <div className={`border rounded px-2 py-1 text-xs font-mono ${supplyCode?"bg-blue-50 text-blue-700 border-blue-200":"bg-gray-50 text-gray-400"}`}>
-                        {supplyCode || "-- enter L4 code above --"}
-                      </div>
-                    </div>
-                  </div>
                   <div>
-                    <label className="text-[10px] text-gray-500 block mb-1.5">Scope pattern <span className="text-red-400">*</span></label>
-                    <div className="space-y-1.5">
-                      {WIZ_SCOPE_PATTERNS.map(p=>(
-                        <label key={p.id} className={`flex items-start gap-2 p-2 rounded border cursor-pointer text-xs ${scopePattern===p.id?"bg-blue-50 border-blue-300":"border-gray-200 hover:border-gray-300"}`}>
-                          <input type="radio" name="scope_pattern" value={p.id}
-                            checked={scopePattern===p.id} onChange={()=>setScopePattern(p.id)}
-                            className="mt-0.5 flex-shrink-0"/>
-                          <div>
-                            <div className="font-medium text-gray-800">{p.label}</div>
-                            <div className="text-gray-400 text-[10px]">{p.desc}</div>
-                          </div>
-                        </label>
-                      ))}
-                    </div>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Item suffix</label>
+                    <select value={itemNo} onChange={e=>setItemNo(e.target.value)}
+                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      {["01","02","03","04","05","06","07","08","09","10"].map(n=><option key={n}>{n}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {supplyCode && (
+                  <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-[10px] text-blue-700">
+                    Supply code: <span className="font-mono font-semibold">{supplyCode}</span>
+                    {installCode && <span className="ml-3">Install: <span className="font-mono">{installCode}</span></span>}
+                    {commCode    && <span className="ml-3">Commission: <span className="font-mono">{commCode}</span></span>}
+                  </div>
+                )}
+                <div>
+                  <label className="text-[10px] text-gray-500 block mb-1.5">Scope pattern *</label>
+                  <div className="space-y-1.5">
+                    {WIZ_SCOPE_PATTERNS.map(p => (
+                      <label key={p.id} className={"flex items-start gap-2 p-2 rounded border cursor-pointer text-xs " + (scopePattern === p.id ? "bg-blue-50 border-blue-300" : "border-gray-200 hover:border-gray-300")}>
+                        <input type="radio" name="scope_pattern" value={p.id}
+                          checked={scopePattern === p.id} onChange={()=>setScopePattern(p.id)}
+                          className="mt-0.5 flex-shrink-0"/>
+                        <div>
+                          <div className="font-medium text-gray-800">{p.label}</div>
+                          <div className="text-gray-400 text-[10px]">{p.desc}</div>
+                        </div>
+                      </label>
+                    ))}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* STEP 2 — Supply item */}
+            {/* STEP 2 */}
             {step === 1 && (
               <div className="space-y-3">
-                <div className="text-xs font-semibold text-gray-700 mb-3 pb-1.5 border-b">Step 2 -- supply item definition</div>
-                <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 text-[10px] text-blue-700 mb-2">
+                <div className="text-xs font-semibold text-gray-700 pb-1.5 border-b">Step 2 -- supply item definition</div>
+                <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-[10px] text-blue-700">
                   Defining supply item for <span className="font-mono font-semibold">{supplyCode}</span>
-                  {prefill && " -- pre-filled from catalogue item. Review and confirm."}
+                  {prefill && prefill.description ? " -- pre-filled from catalogue item." : ""}
                 </div>
                 <div>
-                  <label className="text-[10px] text-gray-500 block mb-0.5">Item description <span className="text-red-400">*</span></label>
+                  <label className="text-[10px] text-gray-500 block mb-0.5">Item description *</label>
                   <input value={supplyDesc} onChange={e=>setSupplyDesc(e.target.value)}
                     placeholder="e.g. 66kV Surge Arrester -- 10kA station class"
                     className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                 </div>
-                {prefill?.make_model && (
+                {make !== "" && (
                   <div>
-                    <label className="text-[10px] text-gray-500 block mb-0.5">Make / model (from catalogue)</label>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Make / model</label>
                     <input value={make} onChange={e=>setMake(e.target.value)}
                       className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="text-[10px] text-gray-500 block mb-0.5">AER resource type <span className="text-red-400">*</span></label>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">AER resource type *</label>
                     <select value={aer} onChange={e=>setAer(e.target.value)}
                       className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                       {WIZ_AER_TYPES.map(t=><option key={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-500 block mb-0.5">Default delivery method</label>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Delivery method</label>
                     <select value={delivery} onChange={e=>setDelivery(e.target.value)}
                       className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                       {WIZ_DELIVERY.map(d=><option key={d}>{d}</option>)}
@@ -7229,48 +7208,37 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">Unit price / PCE price ($)</label>
                     <input type="number" min="0" step="0.01" value={price} onChange={e=>setPrice(e.target.value)}
-                      placeholder={prefill ? "Pre-filled from catalogue" : "0 or leave blank"}
+                      placeholder="0 or leave blank for GAP"
                       className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
-                    {!price && <div className="text-[10px] text-amber-600 mt-0.5">No price -- will appear as GAP in supply items</div>}
+                    {!price && <div className="text-[10px] text-amber-600 mt-0.5">No price -- will show as GAP</div>}
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">LLT item?</label>
-                    <select value={isLLT?"yes":"no"} onChange={e=>setIsLLT(e.target.value==="yes")}
+                    <select value={isLLT ? "yes" : "no"} onChange={e=>setIsLLT(e.target.value === "yes")}
                       className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                       <option value="no">No -- standard lead time</option>
-                      <option value="yes">Yes -- triggers Copperleaf B-row procurement</option>
+                      <option value="yes">Yes -- triggers Copperleaf B-row</option>
                     </select>
                   </div>
-                </div>
-                <div className="bg-gray-50 border border-gray-200 rounded px-3 py-2 text-[10px] text-gray-500">
-                  <span className="font-semibold">Note:</span> Install and commission resource types are set per-estimate by the estimator.
-                  You are setting the supply-level defaults here.
                 </div>
               </div>
             )}
 
-            {/* STEP 3 — Hours */}
+            {/* STEP 3 */}
             {step === 2 && (
-              <div className="space-y-4">
-                <div className="text-xs font-semibold text-gray-700 mb-1 pb-1.5 border-b">Step 3 -- pre-agreed standard hours</div>
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-700 pb-1.5 border-b">Step 3 -- pre-agreed standard hours</div>
                 <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-[10px] text-amber-800">
-                  These are the Class 4 pre-agreed standard hours negotiated with department stakeholder managers.
-                  Estimators do <span className="font-semibold">not</span> enter install or commission hours -- they flow automatically from these values.
+                  These are Class 4 pre-agreed standard hours. Estimators do <span className="font-semibold">not</span> enter install or commission hours -- they flow automatically.
                 </div>
-
                 {scopePattern === "supplyonly" ? (
-                  <div className="bg-gray-50 border rounded p-4 text-center text-xs text-gray-500">
-                    Supply only -- no install or commission hours required for this scope pattern.
-                  </div>
+                  <div className="bg-gray-50 border rounded p-4 text-center text-xs text-gray-500">Supply only -- no install or commission hours required.</div>
                 ) : (
-                  <>
-                    {/* Install hours */}
+                  <div className="space-y-3">
                     {scopePattern !== "combined" && (
                       <div className="border rounded p-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2 pb-1 border-b">
-                          Install hours -- {installCode}
-                        </div>
-                        <div className="grid grid-cols-3 gap-3 mb-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2 pb-1 border-b">Install hours -- {installCode}</div>
+                        <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Crew size</label>
                             <input type="number" min="1" max="20" value={installCrew} onChange={e=>setInstallCrew(e.target.value)}
@@ -7284,31 +7252,23 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Total hrs / unit</label>
                             <div className="border rounded px-2 py-1 text-xs font-bold bg-green-50 text-green-800 border-green-200">
-                              {installHrsTotal > 0 ? `${installHrsTotal} hrs` : "--"}
+                              {installHrsTotal > 0 ? installHrsTotal + " hrs" : "--"}
                             </div>
                           </div>
                         </div>
-                        <div className="text-[10px] text-gray-400">
-                          {installCrew} crew x {installHrs} hrs = <span className="font-semibold text-gray-600">{installHrsTotal} total hrs/unit</span>
-                          <span className="ml-2">-- stored as ee_unit_hrs on the Install row</span>
-                        </div>
                       </div>
                     )}
-
-                    {/* Commission hours */}
                     {(scopePattern === "standard" || scopePattern === "scada") && (
                       <div className="border rounded p-3">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2 pb-1 border-b">
-                          Commission hours (base -- before scaling) -- {commCode || "commission row"}
-                        </div>
-                        <div className="grid grid-cols-3 gap-3 mb-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2 pb-1 border-b">Commission hours (base before scaling)</div>
+                        <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Base hrs / unit</label>
                             <input type="number" min="0" step="0.5" value={commHrs} onChange={e=>setCommHrs(e.target.value)}
                               className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 block mb-0.5">Economy-of-scale profile</label>
+                            <label className="text-[10px] text-gray-500 block mb-0.5">Scaling profile</label>
                             <select value={scalingProfile} onChange={e=>setScalingProfile(e.target.value)}
                               className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
                               {WIZ_SCALING_PROFILES.map(p=><option key={p}>{p}</option>)}
@@ -7316,95 +7276,64 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Stored as</label>
-                            <div className="border rounded px-2 py-1 text-xs font-bold bg-green-50 text-green-800 border-green-200">
-                              {commHrs || "--"} hrs (base)
-                            </div>
+                            <div className="border rounded px-2 py-1 text-xs font-bold bg-green-50 text-green-800 border-green-200">{commHrs || "--"} hrs (base)</div>
                           </div>
-                        </div>
-                        <div className="text-[10px] text-gray-400">
-                          Base hours scaled at estimate time using the <span className="font-semibold text-gray-600">{scalingProfile}</span> profile.
-                          Scaling reduces hours per unit as quantity increases.
                         </div>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             )}
 
-            {/* STEP 4 — Validate + governance */}
+            {/* STEP 4 */}
             {step === 3 && (
-              <div className="space-y-4">
-                <div className="text-xs font-semibold text-gray-700 mb-1 pb-1.5 border-b">Step 4 -- validate and governance</div>
-                <div className="bg-green-50 border border-green-200 rounded px-3 py-2 text-[10px] text-green-700 mb-1">
-                  {rows.length} row{rows.length!==1?"s":""} ready to create. Review before saving.
+              <div className="space-y-3">
+                <div className="text-xs font-semibold text-gray-700 pb-1.5 border-b">Step 4 -- validate and governance</div>
+                <div className="bg-green-50 border border-green-200 rounded px-3 py-2 text-[10px] text-green-700">
+                  {rows.length} row{rows.length !== 1 ? "s" : ""} ready to create. Review before saving.
                 </div>
-
-                {/* Preview table */}
                 <table className="w-full text-[10px] border-collapse">
                   <thead>
                     <tr className="bg-gray-700 text-white">
-                      <th className="text-left py-1.5 px-2 font-medium">WBS code</th>
-                      <th className="text-left py-1.5 px-2 font-medium">Scope</th>
-                      <th className="text-left py-1.5 px-2 font-medium">Description</th>
-                      <th className="text-right py-1.5 px-2 font-medium">Hrs / unit</th>
-                      <th className="text-right py-1.5 px-2 font-medium">Price / rate</th>
+                      {["WBS code","Scope","Description","Hrs / unit","Price / rate"].map(h=>(
+                        <th key={h} className={"py-1.5 px-2 font-medium " + (h === "Hrs / unit" || h === "Price / rate" ? "text-right" : "text-left")}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r, i) => (
-                      <tr key={i} className={i%2===0?"bg-gray-50":"bg-white"}>
+                      <tr key={i} className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}>
                         <td className="py-1.5 px-2 font-mono text-blue-700 font-semibold">{r.code}</td>
                         <td className="py-1.5 px-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
-                            r.scope==="Supply"?"bg-blue-100 text-blue-800":
-                            r.scope==="Install"?"bg-green-100 text-green-800":
-                            "bg-amber-100 text-amber-800"
-                          }`}>{r.scope}</span>
+                          <span className={"px-1.5 py-0.5 rounded text-[9px] font-semibold " + (r.scope==="Supply"?"bg-blue-100 text-blue-800":r.scope==="Install"?"bg-green-100 text-green-800":"bg-amber-100 text-amber-800")}>{r.scope}</span>
                         </td>
                         <td className="py-1.5 px-2 text-gray-700">{r.desc}</td>
                         <td className="py-1.5 px-2 text-right text-gray-600">{r.hrs !== null ? fmtHrs(r.hrs) : "--"}</td>
-                        <td className="py-1.5 px-2 text-right text-gray-600">
-                          {r.scope==="Supply" && price ? `$${parseFloat(price).toLocaleString()}` : "--"}
-                        </td>
+                        <td className="py-1.5 px-2 text-right text-gray-600">{r.scope === "Supply" && price ? "$" + parseFloat(price).toLocaleString() : "--"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-
-                {/* Summary */}
                 <div className="grid grid-cols-3 gap-2 text-[10px]">
-                  <div className="bg-gray-50 border rounded p-2">
-                    <div className="text-gray-400 mb-0.5">Delivery method</div>
-                    <div className="font-medium text-gray-700">{delivery}</div>
-                  </div>
-                  <div className="bg-gray-50 border rounded p-2">
-                    <div className="text-gray-400 mb-0.5">AER resource type</div>
-                    <div className="font-medium text-gray-700">{aer.split("--")[0].trim()}</div>
-                  </div>
-                  <div className="bg-gray-50 border rounded p-2">
-                    <div className="text-gray-400 mb-0.5">Status on save</div>
-                    <div className="font-semibold text-amber-700">Pending Governance</div>
-                  </div>
+                  {[["Delivery",delivery],["AER type",aer.split("--")[0].trim()],["Status on save","Pending Governance"]].map(([k,v],i)=>(
+                    <div key={i} className="bg-gray-50 border rounded p-2">
+                      <div className="text-gray-400 mb-0.5">{k}</div>
+                      <div className={"font-medium " + (k==="Status on save"?"text-amber-700":"text-gray-700")}>{v}</div>
+                    </div>
+                  ))}
                 </div>
-
-                {/* Governance PIN */}
                 <div className="bg-amber-50 border border-amber-300 rounded p-3">
-                  <div className="text-[10px] font-semibold text-amber-800 mb-2">
-                    Governance gate -- WBS Manager PIN required
-                  </div>
-                  <div className="text-[10px] text-amber-700 mb-2">
-                    New WBS items are saved as Pending until governance sign-off is confirmed.
-                    Items will be visible in the WBS editor but cannot be selected in estimates until activated.
-                  </div>
+                  <div className="text-[10px] font-semibold text-amber-800 mb-2">Governance gate -- WBS Manager PIN required</div>
+                  <div className="text-[10px] text-amber-700 mb-2">New WBS items are saved as Pending until governance sign-off is confirmed. Items are visible but cannot be used in estimates until activated.</div>
                   <div className="flex gap-3 items-end">
                     <div className="flex-1">
-                      <label className="text-[10px] text-gray-500 block mb-0.5">WBS Manager PIN <span className="text-red-400">*</span></label>
+                      <label className="text-[10px] text-gray-500 block mb-0.5">WBS Manager PIN *</label>
                       <input type="password" value={pinInput} onChange={e=>{setPinInput(e.target.value);setPinError(false);}}
-                        placeholder="Enter PIN"
                         onKeyDown={e=>{ if(e.key==="Enter") trySubmit(); }}
-                        className={`w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 ${pinError?"border-red-400 bg-red-50 focus:ring-red-400":"focus:ring-blue-400"}`}/>
-                      {pinError && <div className="text-[10px] text-red-600 mt-0.5">Incorrect PIN -- try again</div>}
+                        placeholder="Enter PIN"
+                        className={"w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 " + (pinError ? "border-red-400 bg-red-50 focus:ring-red-400" : "focus:ring-blue-400")}/>
+                      {pinError && <div className="text-[10px] text-red-600 mt-0.5">Incorrect PIN</div>}
                     </div>
                     <div className="flex-1">
                       <label className="text-[10px] text-gray-500 block mb-0.5">Governance ref (optional)</label>
@@ -7421,8 +7350,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
 
         {/* Footer */}
         <div className="border-t px-5 py-3 flex justify-between items-center flex-shrink-0 bg-gray-50 rounded-b-xl">
-          <button
-            onClick={()=>setStep(s=>Math.max(0,s-1))}
+          <button onClick={()=>setStep(s=>Math.max(0,s-1))}
             style={{visibility: step===0?"hidden":"visible"}}
             className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-1.5 rounded">
             Back
@@ -7430,16 +7358,12 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
           <div className="flex gap-2">
             <button onClick={onClose} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
             {step < 3 ? (
-              <button
-                onClick={()=>setStep(s=>s+1)}
-                disabled={!canNext()}
+              <button onClick={()=>setStep(s=>s+1)} disabled={!canNext()}
                 className="text-xs bg-blue-700 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-5 py-1.5 rounded font-semibold">
                 Next
               </button>
             ) : (
-              <button
-                onClick={trySubmit}
-                disabled={!pinInput}
+              <button onClick={trySubmit} disabled={!pinInput}
                 className="text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-5 py-1.5 rounded font-semibold">
                 Create WBS items
               </button>
@@ -7451,62 +7375,6 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes, supplyItems }) {
   );
 }
 
-// ── EQUIPMENT CATALOGUE MANAGER (WBS Manager tab) ────────────────
-// Admin view — full catalogue, price editing, WBS assignment, add new items
-// ── EQUIPMENT PRICING EDITOR ─────────────────────────────────────────────────
-// Shows base price, date of quote, annual escalation rate, and calculates
-// ── ESC STREAM DEFINITIONS ──────────────────────────────────────────────────
-// Three standard streams from the IET workbook Escalation sheet (FY26-FY29).
-// Index 0 = FY26 base year (no escalation applied), 1=FY27, 2=FY28, 3=FY29, 4=FY30
-const ESC_STREAMS = {
-  Materials:   { label: "Materials",             color: "purple", rates: [0, 0.049, 0.040, 0.040, 0.040] },
-  Contractors: { label: "Contractors",           color: "orange", rates: [0, 0.049, 0.045, 0.040, 0.035] },
-  EEInternal:  { label: "EE Internal (labour)",  color: "blue",   rates: [0, 0.045, 0.038, 0.035, 0.035] },
-  Manual:      { label: "Manual entry",          color: "gray",   rates: null },
-};
-const ESC_FY_LABELS = ["FY26","FY27","FY28","FY29","FY30"];
-
-// Sub-component: escalation preview table
-function EscPreviewTable({ basePrice, streamKey, manualRates, highlightFY }) {
-  const stream = ESC_STREAMS[streamKey];
-  const rates  = stream.rates || manualRates || [0,0,0,0,0];
-  const fmtP   = (v) => v != null && v > 0 ? "$" + Math.round(v).toLocaleString("en-AU") : "—";
-  const fmtR   = (r, i) => i === 0 ? "base year" : (r*100).toFixed(1)+"%";
-  let cf = 1;
-  const rows = rates.map((r, i) => {
-    if (i > 0) cf *= (1 + r);
-    const esc   = basePrice * cf;
-    const added = esc - basePrice;
-    const isHL  = ESC_FY_LABELS[i] === highlightFY;
-    return { fy: ESC_FY_LABELS[i], rate: r, cf, esc, added, isHL, i };
-  });
-  return (
-    <table className="w-full text-[10px] border-collapse">
-      <thead>
-        <tr className="border-b border-gray-200">
-          <th className="text-left py-1 px-2 text-gray-400 font-medium">FY</th>
-          <th className="text-right py-1 px-2 text-gray-400 font-medium">Rate</th>
-          <th className="text-right py-1 px-2 text-gray-400 font-medium">Cum. factor</th>
-          <th className="text-right py-1 px-2 text-gray-400 font-medium">Base (stored)</th>
-          <th className="text-right py-1 px-2 text-gray-400 font-medium">Escalated</th>
-          <th className="text-right py-1 px-2 text-gray-400 font-medium">Added/unit</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(({fy, rate, cf: cumF, esc, added, isHL, i}) => (
-          <tr key={fy} className={isHL ? "bg-blue-50 font-semibold" : "border-b border-gray-100"}>
-            <td className={`py-1 px-2 ${isHL?"text-blue-700":"text-gray-600"}`}>{fy}{isHL?" <":""}</td>
-            <td className={`py-1 px-2 text-right ${isHL?"text-blue-600":"text-gray-400"}`}>{fmtR(rate,i)}</td>
-            <td className="py-1 px-2 text-right text-gray-500">{cumF.toFixed(4)}x</td>
-            <td className="py-1 px-2 text-right text-gray-600">{fmtP(basePrice)}</td>
-            <td className={`py-1 px-2 text-right font-bold ${isHL?"text-blue-700":"text-green-700"}`}>{fmtP(esc)}</td>
-            <td className={`py-1 px-2 text-right ${added>0?"text-amber-600":"text-gray-300"}`}>{added>0?"+"+fmtP(added):"--"}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
 
 // Sub-component: escalation stream selector
 function EscStreamSelector({ streamKey, setStreamKey, manualRates, setManualRates, compact=false }) {
