@@ -1991,6 +1991,64 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               }
                             </div>
                           </div>
+
+                          {/* Commission link summary — shows Phase 4 hrs that will be derived */}
+                          {(()=>{
+                            // Collect unique commission WBS codes from linked supply items
+                            const commMap = {};
+                            agg.linked.forEach(sup => {
+                              const cw = sup.commission_wbs;
+                              if (!cw) return;
+                              const ln = lines[sup.wbs_code] || {};
+                              const q  = parseFloat(ln.qty || "0");
+                              if (!commMap[cw]) commMap[cw] = { qty:0, data: commLookup[cw] };
+                              commMap[cw].qty += q;
+                            });
+                            const commEntries = Object.entries(commMap);
+                            if (!commEntries.length) return (
+                              <div className="text-[10px] text-gray-400 bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5">
+                                ⚠ No commission WBS linked to supply items in this install group — commission hrs will not flow to Phase 4
+                              </div>
+                            );
+                            return (
+                              <div className="bg-teal-50 border border-teal-200 rounded overflow-hidden">
+                                <div className="bg-teal-700 text-white text-[10px] font-semibold px-2.5 py-1 flex items-center gap-2">
+                                  <span>↳ Phase 4 Commission (auto-derived)</span>
+                                </div>
+                                <table className="w-full text-xs">
+                                  <thead className="bg-teal-100 border-b border-teal-200">
+                                    <tr>
+                                      <th className="text-left px-2 py-1 font-semibold text-teal-800">Commission WBS</th>
+                                      <th className="text-center px-2 py-1 font-semibold text-teal-800">Qty</th>
+                                      <th className="text-center px-2 py-1 font-semibold text-teal-800">Hrs/unit</th>
+                                      <th className="text-right px-2 py-1 font-semibold text-teal-800">= Comm Hrs</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {commEntries.map(([cw, {qty, data}]) => {
+                                      const hpu  = data?.hrs_per_unit || 0;
+                                      const hrs  = qty * hpu;
+                                      const hasQ = qty > 0;
+                                      return (
+                                        <tr key={cw} className={`border-b border-teal-100 ${hasQ ? "bg-teal-50/60" : ""}`}>
+                                          <td className="px-2 py-1">
+                                            <div className="font-mono text-gray-500 text-[10px]">{cw}</div>
+                                            <div className="text-gray-700 truncate max-w-[200px]">{data?.description || "—"}</div>
+                                          </td>
+                                          <td className={`px-2 py-1 text-center font-bold ${hasQ ? "text-teal-800" : "text-gray-300"}`}>{hasQ ? qty : "—"}</td>
+                                          <td className="px-2 py-1 text-center text-gray-500">{hpu}h</td>
+                                          <td className={`px-2 py-1 text-right font-bold ${hrs > 0 ? "text-teal-800" : "text-gray-300"}`}>
+                                            {hrs > 0 ? fmtHrs(hrs) : "—"}
+                                            {!data && <span className="ml-1 text-[9px] text-red-500">⚠ not in lookup</span>}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
                           <div className="bg-purple-50 border border-purple-200 rounded p-2.5 grid grid-cols-3 gap-3 text-xs">
                             <div className="text-center"><div className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">Active Hrs</div><div className={`font-bold text-lg ${agg.isOverridden?"text-orange-600":"text-purple-700"}`}>{agg.activeHrs.toFixed(1)}</div><div className="text-[10px] text-gray-400">{agg.isOverridden?"manual":"auto"}</div></div>
                             <div className="text-center"><div className="text-gray-500 text-[10px] uppercase font-semibold mb-0.5">EE Internal</div><div className="font-bold text-blue-800">{fmt(agg.eeInt)}</div><div className="text-[10px] text-gray-400">{agg.isContr?"contractor":"EE labour"}</div></div>
