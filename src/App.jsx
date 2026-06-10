@@ -3262,7 +3262,7 @@ const CATEGORY_COLORS = {
 };
 const COMPLEXITY_DOT = { "High":"bg-red-400", "Medium":"bg-yellow-400", "Low":"bg-green-400" };
 
-function TemplateLibrary({ onLoad, saved, setSaved }) {
+function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) {
   const [search,      setSearch]      = useState("");
   const [catFilter,   setCatFilter]   = useState("All");
   const [selected,    setSelected]    = useState(null);
@@ -3271,13 +3271,100 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
   const [customClass, setCustomClass] = useState("");
   const [customType,  setCustomType]  = useState("");
 
-  const categories = ["All", ...Array.from(new Set(IET_TEMPLATES.map(t=>t.category)))];
+  // Custom templates stored in localStorage
+  const [customTemplates, setCustomTemplates] = useState(() => {
+    try { const r = localStorage.getItem("iet_custom_templates"); return r ? JSON.parse(r) : []; } catch(e) { return []; }
+  });
+  const saveCustomTemplates = (arr) => {
+    setCustomTemplates(arr);
+    localStorage.setItem("iet_custom_templates", JSON.stringify(arr));
+  };
 
-  const filtered = IET_TEMPLATES.filter(t => {
+  // Save-as-template modal state
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveForm, setSaveForm] = useState({
+    name:"", category:"Zone Substation", icon:"⚡", description:"", tags:"", complexity:"Medium",
+  });
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Count non-zero qty lines in current estimate
+  const currentQtyLines = currentLines
+    ? Object.entries(currentLines).filter(([,ln]) => parseFloat(ln.qty||0) > 0)
+    : [];
+  const hasEstimate = currentInv && currentInv.name && currentQtyLines.length > 0;
+
+  const openSaveModal = () => {
+    setSaveForm({
+      name: currentInv?.name || "",
+      category: "Zone Substation",
+      icon: "⚡",
+      description: "",
+      tags: "",
+      complexity: currentInv?.complexity || "Medium",
+    });
+    setSaveError("");
+    setSaveSuccess(false);
+    setShowSaveModal(true);
+  };
+
+  const doSaveTemplate = () => {
+    if (!saveForm.name.trim()) { setSaveError("Template name is required."); return; }
+    const lines = {};
+    currentQtyLines.forEach(([wbs, ln]) => {
+      lines[wbs] = { qty: ln.qty, factor: ln.factor || "1" };
+    });
+    const newTmpl = {
+      id: `tmpl_custom_${Date.now()}`,
+      _custom: true,
+      category: saveForm.category,
+      name: saveForm.name.trim(),
+      description: saveForm.description.trim() || `Custom template built from ${currentInv.name}.`,
+      estClass: currentInv.estClass || "Class 5",
+      type: currentInv.type || "Internally Funded",
+      complexity: saveForm.complexity,
+      icon: saveForm.icon || "📋",
+      tags: saveForm.tags.split(",").map(t=>t.trim()).filter(Boolean),
+      inv: {
+        name:        saveForm.name.trim(),
+        number:      "",
+        estClass:    currentInv.estClass || "Class 5",
+        type:        currentInv.type || "Internally Funded",
+        complexity:  currentInv.complexity || "Medium",
+        newTech:     currentInv.newTech || "No",
+        planDur:     currentInv.planDur || "3",
+        designDur:   currentInv.designDur || "6",
+        constrDur:   currentInv.constrDur || "12",
+        designStart: currentInv.designStart || "1",
+        constrStart: currentInv.constrStart || "4",
+        contingency: currentInv.contingency || "15",
+        startMonth:  currentInv.startMonth || "Jul",
+        startYear:   currentInv.startYear || "2025",
+      },
+      lines,
+      _savedAt: new Date().toISOString(),
+      _sourceInv: currentInv.name,
+    };
+    saveCustomTemplates([...customTemplates, newTmpl]);
+    setSaveSuccess(true);
+    setTimeout(() => setShowSaveModal(false), 1200);
+  };
+
+  const deleteCustomTemplate = (id, e) => {
+    e.stopPropagation();
+    if (selected?.id === id) setSelected(null);
+    saveCustomTemplates(customTemplates.filter(t => t.id !== id));
+  };
+
+  // Merge built-in + custom templates
+  const allTemplates = [...IET_TEMPLATES, ...customTemplates];
+  const categories = ["All", ...Array.from(new Set(allTemplates.map(t=>t.category)))];
+
+  const filtered = allTemplates.filter(t => {
     const ms = !search ||
       t.name.toLowerCase().includes(search.toLowerCase()) ||
       t.description.toLowerCase().includes(search.toLowerCase()) ||
-      t.tags.some(tag=>tag.toLowerCase().includes(search.toLowerCase()));
+      (t.tags||[]).some(tag=>tag.toLowerCase().includes(search.toLowerCase()));
     const cs = catFilter==="All" || t.category===catFilter;
     return ms && cs;
   });
@@ -3306,14 +3393,132 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
     onLoad(saveObj);
   };
 
+  const ICONS = ["⚡","🏗️","🔌","📡","🔧","🏭","🌐","📋","⚙️","🔋","🛡️","📐"];
+  const CATEGORIES = ["Zone Substation","Subtransmission Mains","SCADA & Comms","Distribution","Ancillary"];
+
   return (
     <div className="flex flex-1 overflow-hidden">
+      {/* Save-as-template modal */}
+      {showSaveModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={()=>setShowSaveModal(false)}>
+          <div className="bg-white rounded-xl shadow-2xl w-[480px] max-h-[90vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+            <div className="bg-[#1e3a5f] text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+              <div>
+                <div className="font-bold text-sm">Save Current Estimate as Template</div>
+                <div className="text-blue-300 text-xs mt-0.5">{currentQtyLines.length} scope lines · Class 5</div>
+              </div>
+              <button onClick={()=>setShowSaveModal(false)} className="text-blue-300 hover:text-white text-lg leading-none">✕</button>
+            </div>
+
+            {saveSuccess ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 gap-3">
+                <div className="text-5xl">✅</div>
+                <div className="text-lg font-bold text-green-700">Template saved!</div>
+                <div className="text-sm text-gray-500">Available in the Template Library.</div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* Source info */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                  <div className="font-semibold mb-1">Source estimate</div>
+                  <div className="text-blue-700">{currentInv?.name || "Unnamed"} · {currentInv?.estClass} · {currentQtyLines.length} lines with quantities</div>
+                  <div className="text-blue-500 mt-0.5">All current quantities, factors and delivery methods will be saved into the template.</div>
+                </div>
+
+                {/* Name */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Template Name *</label>
+                  <input value={saveForm.name} onChange={e=>setSaveForm(p=>({...p,name:e.target.value}))}
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    placeholder="e.g. 132kV 3-Bay Zone Substation"/>
+                </div>
+
+                {/* Category + Icon */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">Category</label>
+                    <select value={saveForm.category} onChange={e=>setSaveForm(p=>({...p,category:e.target.value}))}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none">
+                      {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-gray-600 block mb-1">Complexity</label>
+                    <select value={saveForm.complexity} onChange={e=>setSaveForm(p=>({...p,complexity:e.target.value}))}
+                      className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none">
+                      {["Low","Medium","High","Very High"].map(c=><option key={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Icon picker */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Icon</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ICONS.map(ic=>(
+                      <button key={ic} onClick={()=>setSaveForm(p=>({...p,icon:ic}))}
+                        className={`text-xl w-9 h-9 flex items-center justify-center rounded border-2 transition-colors ${saveForm.icon===ic?"border-blue-500 bg-blue-50":"border-gray-200 hover:border-blue-300"}`}>
+                        {ic}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Description</label>
+                  <textarea value={saveForm.description} onChange={e=>setSaveForm(p=>({...p,description:e.target.value}))}
+                    rows={2} placeholder="Brief description of what this template covers…"
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Tags <span className="font-normal text-gray-400">(comma-separated)</span></label>
+                  <input value={saveForm.tags} onChange={e=>setSaveForm(p=>({...p,tags:e.target.value}))}
+                    placeholder="e.g. 132kV, Greenfield, Zone Substation"
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                </div>
+
+                {/* Scope preview */}
+                <div>
+                  <label className="text-xs font-semibold text-gray-600 block mb-1">Scope lines to save ({currentQtyLines.length})</label>
+                  <div className="bg-gray-50 rounded border border-gray-200 max-h-36 overflow-y-auto">
+                    {currentQtyLines.map(([wbs,ln])=>(
+                      <div key={wbs} className="flex items-center justify-between px-2.5 py-1 border-b border-gray-100 last:border-0 text-xs">
+                        <span className="font-mono text-gray-500 text-[10px]">{wbs}</span>
+                        <span className="text-gray-700 font-semibold">Qty {ln.qty}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {saveError && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">{saveError}</div>}
+              </div>
+            )}
+
+            {!saveSuccess && (
+              <div className="border-t px-5 py-3 flex gap-2 flex-shrink-0">
+                <button onClick={()=>setShowSaveModal(false)}
+                  className="flex-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 py-2 rounded font-semibold">
+                  Cancel
+                </button>
+                <button onClick={doSaveTemplate}
+                  className="flex-1 text-xs bg-blue-700 hover:bg-blue-600 text-white py-2 rounded font-bold">
+                  💾 Save Template
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Left — template list */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0">
+        <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0 flex-wrap">
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search templates…"
-            className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+            className="flex-1 min-w-32 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
           <div className="flex border border-gray-200 rounded overflow-hidden">
             {categories.map(c=>(
               <button key={c} onClick={()=>setCatFilter(c)}
@@ -3321,7 +3526,21 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
             ))}
           </div>
           <span className="text-xs text-gray-400">{filtered.length} templates</span>
+          <div className="flex-1 min-w-0"/>
+          {/* Save-as-template button */}
+          <button
+            onClick={hasEstimate ? openSaveModal : undefined}
+            title={hasEstimate ? "Save current estimate as a reusable template" : "Open an estimate with quantities to save as template"}
+            className={`text-xs px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 transition-colors ${
+              hasEstimate
+                ? "bg-green-700 hover:bg-green-600 text-white cursor-pointer"
+                : "bg-gray-100 text-gray-400 cursor-not-allowed"
+            }`}>
+            💾 Save Current as Template
+            {!hasEstimate && <span className="text-[10px] font-normal opacity-75">(needs active estimate)</span>}
+          </button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4 grid grid-cols-1 gap-3">
           {filtered.map(tmpl=>(
             <div key={tmpl.id}
@@ -3338,15 +3557,28 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
                       <span className={`w-1.5 h-1.5 rounded-full ${COMPLEXITY_DOT[tmpl.complexity]||"bg-gray-300"}`}/>
                       {tmpl.complexity} complexity
                     </span>
+                    {tmpl._custom && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700 border border-green-200 font-semibold">Custom</span>
+                    )}
                   </div>
                   <p className="text-xs text-gray-500 leading-relaxed">{tmpl.description}</p>
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {tmpl.tags.map(tag=>(
+                    {(tmpl.tags||[]).map(tag=>(
                       <span key={tag} className="text-[10px] bg-gray-100 text-gray-500 rounded px-1.5 py-0.5">{tag}</span>
                     ))}
                   </div>
-                  <div className="text-[10px] text-gray-400 mt-2">
-                    {Object.keys(tmpl.lines).length} pre-populated scope lines · {tmpl.inv.planDur}m plan · {tmpl.inv.designDur}m design · {tmpl.inv.constrDur}m construction
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-[10px] text-gray-400">
+                      {Object.keys(tmpl.lines).length} pre-populated scope lines · {tmpl.inv.planDur}m plan · {tmpl.inv.designDur}m design · {tmpl.inv.constrDur}m construction
+                    </div>
+                    {tmpl._custom && (
+                      <button
+                        onClick={(e)=>deleteCustomTemplate(tmpl.id, e)}
+                        className="text-[10px] text-red-400 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors"
+                        title="Delete this custom template">
+                        🗑 Delete
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3361,7 +3593,7 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
           <div className="bg-[#1e3a5f] text-white px-4 py-3 flex items-start justify-between flex-shrink-0">
             <div>
               <div className="font-bold text-sm leading-tight">{selected.name}</div>
-              <div className="text-blue-300 text-xs mt-0.5">{selected.category}</div>
+              <div className="text-blue-300 text-xs mt-0.5">{selected.category}{selected._custom?" · Custom template":""}</div>
             </div>
             <button onClick={()=>setSelected(null)} className="text-blue-400 hover:text-white text-sm ml-2">✕</button>
           </div>
@@ -3426,14 +3658,21 @@ function TemplateLibrary({ onLoad, saved, setSaved }) {
               </div>
               <div className="text-[10px] text-gray-400 mt-1 text-center">Contingency: {selected.inv.contingency}%</div>
             </div>
+
+            {selected._custom && selected._savedAt && (
+              <div className="text-[10px] text-gray-400 bg-green-50 border border-green-100 rounded p-2">
+                <span className="font-semibold text-green-700">Custom template</span> · Built from: {selected._sourceInv || "estimate"}<br/>
+                Saved: {new Date(selected._savedAt).toLocaleString("en-AU",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+              </div>
+            )}
           </div>
 
-          <div className="border-t p-3 flex-shrink-0">
+          <div className="border-t p-3 flex-shrink-0 space-y-2">
             <button onClick={()=>openTemplate(selected)}
               className="w-full bg-blue-700 hover:bg-blue-600 text-white text-sm py-2.5 rounded-lg font-bold flex items-center justify-center gap-2">
               {selected.icon} Open Template as New Estimate
             </button>
-            <div className="text-[10px] text-gray-400 text-center mt-1.5">Opens in Estimation Tool · Save when ready to add to Portfolio</div>
+            <div className="text-[10px] text-gray-400 text-center">Opens in Estimation Tool · Save when ready to add to Portfolio</div>
           </div>
         </div>
       )}
@@ -3719,7 +3958,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       </div>
 
       {/* Template Library tab */}
-      {hubTab==="templates" && <TemplateLibrary onLoad={onLoad} saved={saved} setSaved={setSaved}/>}
+      {hubTab==="templates" && <TemplateLibrary onLoad={onLoad} saved={saved} setSaved={setSaved} currentInv={currentInv} currentLines={currentLines}/>}
 
       {/* Contribution Split tab */}
       {hubTab==="split" && <ContributionSplitTab saved={saved} setSaved={setSaved}/>}
