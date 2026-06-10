@@ -6989,6 +6989,43 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
 
   const dupSupply = supplyCode && existingCodes && existingCodes.has(supplyCode);
 
+  // L4 exists detection: check if ANY item with this L4 prefix exists
+  // e.g. existingCodes has 3.1.1.16.1.01 -> L4 "3.1.1.16" already in use
+  const l4Exists = useMemo(() => {
+    if (!deviceCode.trim() || !existingCodes) return false;
+    const prefix = deviceCode.trim() + ".";
+    for (const code of existingCodes) {
+      if (code.startsWith(prefix)) return true;
+    }
+    return false;
+  }, [deviceCode, existingCodes]);
+
+  // If L4 exists, find taken suffixes and auto-suggest next free one
+  const takenSuffixes = useMemo(() => {
+    if (!deviceCode.trim() || !existingCodes) return new Set();
+    const taken = new Set();
+    for (const code of existingCodes) {
+      // code format: 3.1.1.16.1.05 -> scope=".1.", suffix="05"
+      const parts = code.split(".");
+      if (parts.length === 6 && code.startsWith(deviceCode.trim() + ".1.")) {
+        taken.add(parts[5]);
+      }
+    }
+    return taken;
+  }, [deviceCode, existingCodes]);
+
+  const nextFreeSuffix = useMemo(() => {
+    for (let i = 1; i <= 99; i++) {
+      const s = String(i).padStart(2, "0");
+      if (!takenSuffixes.has(s)) return s;
+    }
+    return "99";
+  }, [takenSuffixes]);
+
+  // When L4 is detected as existing, auto-set itemNo to next free suffix
+  // This runs when deviceCode changes and l4Exists becomes true
+  const [autoSuffixApplied, setAutoSuffixApplied] = useState(false);
+
   const willCreate = () => {
     const rows = [];
     if (supplyCode) rows.push({ code: supplyCode,  scope: "Supply",     desc: supplyDesc || deviceDesc, hrs: null });
@@ -7123,7 +7160,12 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                     <input value={deviceCode} onChange={e=>setDeviceCode(e.target.value)}
                       placeholder="e.g. 3.1.3.09"
                       className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "focus:ring-blue-400")}/>
-                    {dupSupply && <div className="text-[10px] text-red-600 mt-0.5">Code already exists</div>}
+                    {l4Exists && !dupSupply && (
+                      <div className="text-[10px] text-blue-600 mt-0.5 flex items-center gap-1">
+                        <span>&#9432;</span> L4 group exists -- adding new item to existing group
+                      </div>
+                    )}
+                    {dupSupply && <div className="text-[10px] text-red-600 mt-0.5">Supply code {supplyCode} already taken -- choose a different suffix</div>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -7134,11 +7176,13 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                       className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
                   </div>
                   <div>
-                    <label className="text-[10px] text-gray-500 block mb-0.5">Item suffix</label>
-                    <select value={itemNo} onChange={e=>setItemNo(e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
-                      {["01","02","03","04","05","06","07","08","09","10"].map(n=><option key={n}>{n}</option>)}
-                    </select>
+                    <label className="text-[10px] text-gray-500 block mb-0.5">Item suffix <span className="text-gray-400 font-normal">(or type any number)</span></label>
+                    <input value={itemNo} onChange={e=>setItemNo(e.target.value.replace(/[^0-9]/g,"").padStart(2,"0").slice(-2) || e.target.value)}
+                      list="item-suffix-list"
+                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "border-gray-300 focus:ring-blue-400")}/>
+                    <datalist id="item-suffix-list">
+                      {Array.from({length:60},(_,i)=>String(i+1).padStart(2,"0")).map(n=><option key={n} value={n}/>)}
+                    </datalist>
                   </div>
                 </div>
                 {supplyCode && (
@@ -7146,6 +7190,27 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                     Supply code: <span className="font-mono font-semibold">{supplyCode}</span>
                     {installCode && <span className="ml-3">Install: <span className="font-mono">{installCode}</span></span>}
                     {commCode    && <span className="ml-3">Commission: <span className="font-mono">{commCode}</span></span>}
+                  </div>
+                )}
+                {l4Exists && takenSuffixes.size > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded px-2 py-2 text-[10px]">
+                    <div className="font-semibold text-amber-800 mb-1">
+                      Existing items in group {deviceCode.trim()} ({takenSuffixes.size} supply {takenSuffixes.size === 1 ? "row" : "rows"} found)
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-1">
+                      {[...takenSuffixes].sort().map(s => (
+                        <span key={s} className="bg-amber-200 text-amber-900 font-mono px-1.5 py-0.5 rounded text-[9px]">
+                          {deviceCode.trim()}.1.{s}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="text-amber-700">
+                      Next free suffix: <span className="font-mono font-semibold text-blue-700">{nextFreeSuffix}</span>
+                      {itemNo !== nextFreeSuffix && (
+                        <button onClick={()=>setItemNo(nextFreeSuffix)}
+                          className="ml-2 underline text-blue-600 hover:text-blue-800">Use {nextFreeSuffix}</button>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div>
