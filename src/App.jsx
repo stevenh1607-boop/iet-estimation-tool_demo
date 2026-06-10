@@ -1278,6 +1278,15 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
   },[wbs, selectedL4]);
 
   const getLine = code => lines[code] || {};
+  // ── DIRECT-ENTRY CLASSIFICATION ─────────────────────────────────
+  // Install rows with no supply parent that need estimator-entered hrs (no pre-set rate or hrs)
+  const MANUAL_HRS_INSTALLS = new Set([
+    "3.1.3.07.4.04","3.1.3.07.4.05",   // System spare power transformers - no standard hrs
+    "3.1.3.14.4.03",                     // Cable run set-up - site-specific
+    "3.1.3.24.4.01","3.1.3.24.4.02","3.1.3.24.4.03", // Security installations (S/M/L)
+    "3.2.1.06.4.07","3.2.2.02.4.08",    // Optical fibre splicing 96C - no standard hrs
+    "3.3.1.05.4.03",                     // Cable run set-up ST Mains
+  ]);
   const updLine = (code, key, val) => setLines(p=>({...p,[code]:{...p[code],[key]:val}}));
 
   const calcItem = useCallback((item)=>{
@@ -1494,7 +1503,15 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <div className="min-w-0 pr-1">
                             <div className={`truncate font-medium ${hasQty||directQtyVal?"text-teal-900":"text-gray-500"}`}>
                               {item.description}
-                              {item.isDirectEntry && <span className="ml-1.5 text-[9px] bg-teal-100 text-teal-700 border border-teal-200 rounded px-1 font-semibold">DIRECT</span>}
+                              {item.isDirectEntry && (
+                                item.wbs.startsWith("4.1.1.01")
+                                  ? <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-700 border border-amber-300 rounded px-1 font-semibold">⚡ Enter hrs — earthing commission varies per site</span>
+                                  : item.wbs.startsWith("4.1.3.05")
+                                  ? <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-700 border border-amber-300 rounded px-1 font-semibold">⚡ Enter hrs — PSN/CSN test count varies</span>
+                                  : item.wbs.startsWith("4.1.2.06.7.04")
+                                  ? <span className="ml-1.5 text-[9px] bg-blue-100 text-blue-700 border border-blue-200 rounded px-1 font-semibold">Enter hrs — contractor supervision</span>
+                                  : <span className="ml-1.5 text-[9px] bg-teal-100 text-teal-700 border border-teal-200 rounded px-1 font-semibold">Estimator enters qty</span>
+                              )}
                             </div>
                             <div className="font-mono text-gray-400 text-xs">{item.wbs}{isOvrd&&<span className="ml-1 text-orange-500">⚡ override</span>}</div>
                           </div>
@@ -1641,8 +1658,11 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                     <div className={`font-medium truncate ${hasQty?"text-blue-900":"text-gray-800"}`}>{item.description}</div>
                     <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="text-gray-400 font-mono text-xs">{item.wbs_code}</span>
-                      {item.scope === "Install" && !item.install_wbs &&
-                        <span className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded px-1 font-semibold">Direct-entry · Contractor</span>}
+                      {item.scope === "Install" && !item.install_wbs && (
+                        MANUAL_HRS_INSTALLS.has(item.wbs_code)
+                          ? <span className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded px-1 font-semibold">⚠ Hrs required — enter in cost detail</span>
+                          : <span className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded px-1 font-semibold">Direct-entry · Contractor</span>
+                      )}
                       {item.pce_price>0 && <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1">PCE {fmt(item.pce_price)}</span>}
                       {isContr
                         ? <span className="text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded px-1">Contractor</span>
@@ -1882,137 +1902,184 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             );
           })}
 
-          {/* ── INSTALL ROWS (L5=4) — auto-derived from supply quantities ── */}
+          {/* ── INSTALL ROWS (L5=4) — read-only system-calculated summary ── */}
           {installItems.length > 0 && (
             <div className="sticky bottom-0 border-t-2 border-purple-300 bg-white shadow-lg">
               <div className="bg-purple-700 text-white text-xs font-bold px-4 py-2 flex items-center justify-between cursor-pointer"
                 onClick={()=>setExpandedRows(p=>({...p,__installSection__:!p.__installSection__}))}>
                 <span className="flex items-center gap-2">
-                  ⚙️ {installItems.length} Install Row{installItems.length!==1?"s":""} (L5 = 4)
-                  <span className="text-purple-300 font-normal">— auto-derived from supply · click to expand</span>
+                  🔧 {installItems.length} Install Row{installItems.length!==1?"s":""}
+                  <span className="text-purple-300 font-normal">— system-calculated · read-only · click to review</span>
                 </span>
                 <span className="text-purple-200">{expandedRows.__installSection__ ? "▴" : "▾"} {Object.values(installAgg).reduce((a,r)=>a+r.activeHrs,0).toFixed(1)} hrs total</span>
               </div>
-              {expandedRows.__installSection__ !== false && installItems.map(inst => {
-                const agg = installAgg[inst.wbs_code];
-                if (!agg) return null;
-                const instLn  = lines[inst.wbs_code] || {};
-                const isExp   = !!expandedRows[inst.wbs_code];
-                const hasHrs  = agg.activeHrs > 0;
-                const rowBg   = hasHrs ? "bg-purple-50 border-l-4 border-l-purple-500" : "bg-white";
-                return (
-                  <div key={inst.wbs_code} className={`border-b border-purple-100 ${rowBg}`}>
-                    <div className="grid items-center px-3 py-2 text-xs" style={{gridTemplateColumns:"16px 1fr 90px 110px 110px 80px 56px"}}>
-                      <button onClick={()=>setExpandedRows(p=>({...p,[inst.wbs_code]:!p[inst.wbs_code]}))}
-                        className={`text-center rounded text-xs w-4 h-4 flex items-center justify-center ${isExp?"bg-purple-600 text-white":"text-gray-300 hover:text-purple-500"}`}>
-                        {isExp?"▾":"▸"}
-                      </button>
-                      <div className="min-w-0 pr-2">
-                        <div className="font-medium text-purple-900">{inst.description}</div>
-                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                          <span className="text-purple-400 font-mono text-xs">{inst.wbs_code}</span>
-                          <span className="text-[9px] bg-purple-100 text-purple-700 border border-purple-200 rounded px-1">Install · L5=4</span>
-                          {agg.isOverridden && <span className="text-[9px] bg-orange-100 text-orange-700 border border-orange-200 rounded px-1">⚡ manual override</span>}
-                          <span className="text-[9px] text-gray-400">{agg.linked.length} supply item{agg.linked.length!==1?"s":""} linked</span>
+              {expandedRows.__installSection__ && (
+                <div>
+                  <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 flex items-center gap-2 text-xs text-purple-700">
+                    <span>ℹ️</span>
+                    <span>Install hours are <strong>pre-agreed standard rates</strong> automatically derived from your supply quantities. Overrides require team leader approval via the Review Lines tab.</span>
+                  </div>
+                  {installItems.map(inst => {
+                    const agg = installAgg[inst.wbs_code];
+                    if (!agg) return null;
+                    const hasHrs = agg.activeHrs > 0;
+                    const isExp  = !!expandedRows[inst.wbs_code];
+                    const rowBg  = hasHrs ? "bg-purple-50 border-l-4 border-l-purple-400" : "bg-white";
+                    return (
+                      <div key={inst.wbs_code} className={`border-b border-purple-100 ${rowBg}`}>
+                        <div className="grid items-center px-3 py-2 text-xs cursor-pointer hover:bg-purple-50/70"
+                          style={{gridTemplateColumns:"1fr 90px 120px 90px 80px 56px"}}
+                          onClick={()=>setExpandedRows(p=>({...p,[inst.wbs_code]:!p[inst.wbs_code]}))}>
+                          <div className="min-w-0 pr-2">
+                            <div className="font-medium text-purple-900">{inst.description}</div>
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              <span className="text-purple-400 font-mono text-xs">{inst.wbs_code}</span>
+                              <span className="text-[9px] bg-purple-100 text-purple-700 border border-purple-200 rounded px-1">System-calculated</span>
+                              <span className="text-[9px] text-gray-400">{agg.linked.length} supply item{agg.linked.length!==1?"s":""} linked</span>
+                              {agg.isOverridden && <span className="text-[9px] bg-orange-100 text-orange-700 border border-orange-200 rounded px-1">⚡ override active</span>}
+                            </div>
+                          </div>
+                          <div className="text-center">
+                            <div className={`text-xs font-bold ${agg.isOverridden?"text-orange-600":hasHrs?"text-purple-700":"text-gray-300"}`}>
+                              {hasHrs ? fmtHrs(agg.activeHrs) : "—"}{agg.isOverridden&&<span className="text-orange-400 ml-0.5">*</span>}
+                            </div>
+                            <div className="text-[9px] text-gray-400">{agg.isOverridden?"overridden":"auto"}</div>
+                          </div>
+                          <div className="text-center text-[9px] text-gray-500 truncate px-1">{agg.resName}</div>
+                          <div className="text-center text-[9px] text-gray-400">{agg.delivery}</div>
+                          <div className="text-right pr-1">
+                            <div className={`text-xs font-bold ${hasHrs?"text-blue-800":"text-gray-300"}`}>{hasHrs?fmt(isCommercial?agg.comm:agg.eeInt):"—"}</div>
+                          </div>
+                          <div className="text-center text-gray-300 text-xs">{isExp?"▲":"▸"}</div>
                         </div>
-                      </div>
-                      <div className="text-center">
-                        <div className={`text-xs font-bold ${agg.isOverridden?"text-orange-600":hasHrs?"text-purple-700":"text-gray-300"}`}>
-                          {hasHrs ? fmtHrs(agg.activeHrs) : "—"}{agg.isOverridden&&<span className="text-orange-400 ml-0.5">*</span>}
-                        </div>
-                        {!agg.isOverridden && <div className="text-[9px] text-gray-400">auto</div>}
-                      </div>
-                      <div className="flex justify-center">
-                        <select value={agg.delivery} onChange={e=>updLine(inst.wbs_code,"delivery",e.target.value)}
-                          className="text-xs border border-purple-300 bg-white rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-purple-400 w-full">
-                          <option>EE Delivered</option>
-                          <option>Contractor Delivered</option>
-                        </select>
-                      </div>
-                      <div className="text-right">
-                        <div className={`text-xs font-bold ${hasHrs?"text-blue-800":"text-gray-300"}`}>{hasHrs?fmt(isCommercial?agg.comm:agg.eeInt):"—"}</div>
-                        {hasHrs&&agg.isContr&&<div className="text-[9px] text-teal-600">Contractor</div>}
-                      </div>
-                      <div className="text-center text-[9px] text-gray-500 truncate px-1">{agg.resName.split(" ").slice(-2).join(" ")}</div>
-                      <div className="text-center text-gray-300 text-xs">{isExp?"▲":"▸"}</div>
-                    </div>
-                    {isExp && (
-                      <div className="mx-3 mb-3 rounded-lg border border-purple-200 bg-white shadow-sm overflow-hidden">
-                        <div className="bg-purple-700 text-white text-xs font-semibold px-3 py-1.5 flex items-center justify-between">
-                          <span>Install Detail — {inst.wbs_code}</span>
-                          {!resourceUnlocked
-                            ? <button onClick={()=>setShowResourcePin(true)} className="text-[10px] bg-purple-900 hover:bg-purple-800 text-purple-200 px-2 py-0.5 rounded">🔒 Unlock to override</button>
-                            : <span className="text-[10px] text-orange-300">🔓 Override enabled</span>}
-                        </div>
-                        <div className="p-3 space-y-3">
-                          <div>
-                            <div className="text-xs font-semibold text-gray-600 mb-1.5">Derived from supply quantities:</div>
-                            <div className="bg-gray-50 rounded border border-gray-200 overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-gray-100 border-b">
-                                  <tr>
-                                    <th className="text-left px-2 py-1 font-semibold text-gray-500">Supply item</th>
-                                    <th className="text-center px-2 py-1 font-semibold text-gray-500">Qty</th>
-                                    <th className="text-center px-2 py-1 font-semibold text-gray-500">Hrs/unit</th>
-                                    <th className="text-right px-2 py-1 font-semibold text-purple-700">= Install Hrs</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {agg.linked.map((sup,i)=>{
-                                    const sl=lines[sup.wbs_code]||{};
-                                    const sq=parseFloat(sl.qty||"0");
-                                    const sf=parseFloat(sl.factor||"1");
-                                    const sh=sup.install_hrs_per||0;
-                                    const hrs=sq*sf*sh;
-                                    return (
-                                      <tr key={sup.wbs_code} className={`border-b border-gray-100 ${sq>0?"bg-purple-50/40":""}`}>
-                                        <td className="px-2 py-1"><div className="truncate max-w-[200px] text-gray-700">{sup.description}</div><div className="font-mono text-gray-400 text-[10px]">{sup.wbs_code}</div></td>
-                                        <td className="px-2 py-1 text-center font-bold text-orange-700">{sq>0?sq:"—"}</td>
-                                        <td className="px-2 py-1 text-center text-gray-500">{sh}h</td>
-                                        <td className={`px-2 py-1 text-right font-bold ${hrs>0?"text-purple-700":"text-gray-300"}`}>{hrs>0?fmtHrs(hrs):"—"}</td>
+                        {isExp && (
+                          <div className="mx-3 mb-3 rounded-lg border border-purple-200 bg-white shadow-sm overflow-hidden">
+                            <div className="bg-purple-700 text-white text-xs font-semibold px-3 py-1.5 flex items-center justify-between">
+                              <span>Install derivation — {inst.wbs_code}</span>
+                              <span className="text-purple-300 text-[10px]">Read-only · overrides via Review Lines</span>
+                            </div>
+                            <div className="p-3 space-y-3">
+                              {/* Supply derivation table */}
+                              <div className="bg-gray-50 rounded border border-gray-200 overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead className="bg-gray-100 border-b">
+                                    <tr>
+                                      <th className="text-left px-2 py-1 font-semibold text-gray-500">Supply item</th>
+                                      <th className="text-center px-2 py-1 font-semibold text-gray-500">Qty</th>
+                                      <th className="text-center px-2 py-1 font-semibold text-gray-500">Std hrs/unit</th>
+                                      <th className="text-right px-2 py-1 font-semibold text-purple-700">= Install Hrs</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {agg.linked.map(sup=>{
+                                      const sl=lines[sup.wbs_code]||{};
+                                      const sq=parseFloat(sl.qty||"0");
+                                      const sf=parseFloat(sl.factor||"1");
+                                      const sh=sup.install_hrs_per||0;
+                                      const hrs=sq*sf*sh;
+                                      return (
+                                        <tr key={sup.wbs_code} className={`border-b border-gray-100 ${sq>0?"bg-purple-50/40":""}`}>
+                                          <td className="px-2 py-1"><div className="truncate max-w-[200px] text-gray-700">{sup.description}</div><div className="font-mono text-gray-400 text-[10px]">{sup.wbs_code}</div></td>
+                                          <td className="px-2 py-1 text-center font-bold text-orange-700">{sq>0?sq:"—"}</td>
+                                          <td className="px-2 py-1 text-center text-gray-500">{sh}h</td>
+                                          <td className={`px-2 py-1 text-right font-bold ${hrs>0?"text-purple-700":"text-gray-300"}`}>{hrs>0?fmtHrs(hrs):"—"}</td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                  <tfoot className="bg-purple-50 border-t-2 border-purple-200">
+                                    <tr>
+                                      <td colSpan={3} className="px-2 py-1.5 font-bold text-purple-800">Total derived install hours</td>
+                                      <td className="px-2 py-1.5 text-right font-bold text-purple-800">{fmtHrs(agg.derivedHrs)}</td>
+                                    </tr>
+                                    {agg.isOverridden && (
+                                      <tr className="bg-orange-50">
+                                        <td colSpan={3} className="px-2 py-1 text-orange-700">⚡ Active override</td>
+                                        <td className="px-2 py-1 text-right font-bold text-orange-700">{fmtHrs(agg.activeHrs)}</td>
                                       </tr>
-                                    );
-                                  })}
-                                </tbody>
-                                <tfoot className="bg-purple-50 border-t-2 border-purple-200">
-                                  <tr>
-                                    <td colSpan={3} className="px-2 py-1.5 font-bold text-purple-800">Total derived install hours</td>
-                                    <td className="px-2 py-1.5 text-right font-bold text-purple-800">{fmtHrs(agg.derivedHrs)}</td>
-                                  </tr>
-                                </tfoot>
-                              </table>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-0.5">Install Resource</label>
-                              <select disabled={!resourceUnlocked}
-                                value={resourceOvrd[inst.wbs_code]?.install||inst.resource_main||"ZS Electrical Technician"}
-                                onChange={e=>setResourceOvrd(inst.wbs_code,"install",e.target.value)}
-                                className={`text-xs border rounded px-1.5 py-1 w-full focus:outline-none ${resourceUnlocked?"border-purple-300 bg-white":"border-gray-200 bg-gray-50 text-gray-400"}`}>
-                                {RESOURCE_TYPES.map(r=><option key={r}>{r}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-0.5">
-                                Hrs Override {agg.isOverridden&&<button onClick={()=>updLine(inst.wbs_code,"instHrsOvrd","")} className="ml-1 text-[10px] text-red-500 hover:text-red-700">✕ reset</button>}
-                              </label>
-                              <input type="number" min="0" step="0.5" disabled={!resourceUnlocked}
-                                value={instLn.instHrsOvrd||""}
-                                placeholder={agg.derivedHrs.toFixed(1)+" (auto)"}
-                                onChange={e=>updLine(inst.wbs_code,"instHrsOvrd",e.target.value)}
-                                className={`text-xs border rounded px-1.5 py-1 w-full focus:outline-none ${resourceUnlocked?"border-purple-300":"border-gray-200 bg-gray-50 text-gray-400"} ${agg.isOverridden?"border-orange-400 bg-orange-50 font-bold text-orange-800":""}`}/>
-                            </div>
-                            <div>
-                              <label className="text-xs text-gray-500 block mb-0.5">{agg.isContr?"Contractor Rate ($/unit)":"EE Rate ($/hr)"}</label>
-                              {agg.isContr
-                                ? <input type="number" min="0" disabled={!resourceUnlocked} value={instLn.contrRate||""} placeholder={(inst.contractor_rate||0).toFixed(2)} onChange={e=>updLine(inst.wbs_code,"contrRate",e.target.value)} className={`text-xs border rounded px-1.5 py-1 w-full focus:outline-none ${resourceUnlocked?"border-teal-300 bg-teal-50":"border-gray-200 bg-gray-50 text-gray-400"}`}/>
-                                : <div className="text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded px-1.5 py-1">{fmt(agg.eeRate)}/hr · {fmt(agg.eeLabCost)} total</div>
-                              }
-                            </div>
-                          </div>
+                                    )}
+                                  </tfoot>
+                                </table>
+                              </div>
 
-                          {/* Commission link summary — shows Phase 4 hrs that will be derived */}
+                              {/* Rate info — read-only */}
+                              <div className="grid grid-cols-3 gap-2 text-xs">
+                                <div className="bg-gray-50 rounded border border-gray-200 px-2 py-1.5">
+                                  <div className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Install resource</div>
+                                  <div className="font-medium text-gray-700">{resourceOvrd[inst.wbs_code]?.install||inst.resource_main||"ZS Electrical Technician"}</div>
+                                </div>
+                                <div className="bg-gray-50 rounded border border-gray-200 px-2 py-1.5">
+                                  <div className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">Delivery method</div>
+                                  <div className="font-medium text-gray-700">{agg.delivery}</div>
+                                </div>
+                                <div className="bg-gray-50 rounded border border-gray-200 px-2 py-1.5">
+                                  <div className="text-[9px] text-gray-400 uppercase tracking-wide mb-0.5">{agg.isContr?"Contractor rate":"EE rate"}</div>
+                                  <div className="font-medium text-gray-700">{agg.isContr?fmt(agg.contrRate)+" /unit":fmt(agg.eeRate)+" /hr · "+fmt(agg.eeLabCost)+" total"}</div>
+                                </div>
+                              </div>
+
+                              {/* Commission link summary */}
+                              {(()=>{
+                                const commMap = {};
+                                agg.linked.forEach(sup => {
+                                  const cw = sup.commission_wbs;
+                                  if (!cw) return;
+                                  const ln = lines[sup.wbs_code] || {};
+                                  const q  = parseFloat(ln.qty || "0");
+                                  if (!commMap[cw]) commMap[cw] = { qty:0, data: commLookup[cw] };
+                                  commMap[cw].qty += q;
+                                });
+                                const commEntries = Object.entries(commMap);
+                                if (!commEntries.length) return (
+                                  <div className="text-[10px] text-gray-400 bg-gray-50 border border-gray-200 rounded px-2.5 py-1.5">
+                                    ⚠ No commission WBS linked — commission hrs will not flow to Phase 4
+                                  </div>
+                                );
+                                return (
+                                  <div className="bg-teal-50 border border-teal-200 rounded overflow-hidden">
+                                    <div className="bg-teal-700 text-white text-[10px] font-semibold px-2.5 py-1">↳ Phase 4 Commission (auto-derived)</div>
+                                    <table className="w-full text-xs">
+                                      <thead className="bg-teal-100 border-b border-teal-200">
+                                        <tr>
+                                          <th className="text-left px-2 py-1 font-semibold text-teal-800">Commission WBS</th>
+                                          <th className="text-center px-2 py-1 font-semibold text-teal-800">Qty</th>
+                                          <th className="text-center px-2 py-1 font-semibold text-teal-800">Hrs/unit</th>
+                                          <th className="text-right px-2 py-1 font-semibold text-teal-800">= Comm Hrs</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {commEntries.map(([cw, {qty, data}]) => {
+                                          const hpu  = data?.hrs_per_unit || 0;
+                                          const hrs  = qty * hpu;
+                                          return (
+                                            <tr key={cw} className="border-b border-teal-100">
+                                              <td className="px-2 py-1"><div className="font-mono text-gray-500 text-[10px]">{cw}</div><div className="text-gray-700 truncate max-w-[200px]">{data?.description||"—"}</div></td>
+                                              <td className={`px-2 py-1 text-center font-bold ${qty>0?"text-teal-800":"text-gray-300"}`}>{qty>0?qty:"—"}</td>
+                                              <td className="px-2 py-1 text-center text-gray-500">{hpu}h</td>
+                                              <td className={`px-2 py-1 text-right font-bold ${hrs>0?"text-teal-800":"text-gray-300"}`}>
+                                                {hrs>0?fmtHrs(hrs):"—"}
+                                                {!data&&<span className="ml-1 text-[9px] text-red-500">⚠ not in lookup</span>}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Commission link summary — shows Phase 4 hrs that will be derived */}
                           {(()=>{
                             // Collect unique commission WBS codes from linked supply items
                             const commMap = {};
