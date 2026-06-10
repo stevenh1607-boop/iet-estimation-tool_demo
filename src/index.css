@@ -2,8 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Smooth scrollbars */
-* { scrollbar-width: thin; scrollbar-color: #93c5fd #1e3a5f; }
+/* ── Theme palettes ──────────────────────────────────────────────
+   Each theme defines a --primary-50..900 ramp that replaces the
+   Tailwind "blue" scale used throughout the app (headers, active
+   tabs, buttons, badges, links). Switch themes via data-theme on
+   <html> (see ThemeSettings component). */
+
+:root,
+[data-theme="ee"] {
+  --primary-50:  #EEF2F9;
+  --primary-100: #DCE5F3;
+  --primary-200: #B8CBE6;
+  --primary-300: #93B0DA;
+  --primary-400: #6E96CD;
+  --primary-500: #4A7BC1;
+  --primary-600: #2F60A8;
+  --primary-700: #1F478A;
+  --primary-800: #102C5C;
+  --primary-900: #002266;
+  --accent-500:  #FF6A1F;
+  --accent-600:  #FF5300;
+  --accent-700:  #E64A00;
+}
+
+[data-theme="classic"] {
+  --primary-50:  #eff6ff;
+  --primary-100: #dbeafe;
+  --primary-200: #bfdbfe;
+  --primary-300: #93c5fd;
+  --primary-400: #60a5fa;
+  --primary-500: #3b82f6;
+  --primary-600: #2563eb;
+  --primary-700: #1d4ed8;
+  --primary-800: #1e40af;
+  --primary-900: #1e3a8a;
+  --accent-500:  #f97316;
+  --accent-600:  #ea580c;
+  --accent-700:  #c2410c;
+}
+
+[data-theme="slate"] {
+  --primary-50:  #f8fafc;
+  --primary-100: #f1f5f9;
+  --primary-200: #e2e8f0;
+  --primary-300: #cbd5e1;
+  --primary-400: #94a3b8;
+  --primary-500: #64748b;
+  --primary-600: #475569;
+  --primary-700: #334155;
+  --primary-800: #1e293b;
+  --primary-900: #0f172a;
+  --accent-500:  #f59e0b;
+  --accent-600:  #d97706;
+  --accent-700:  #b45309;
+}
+
+/* Smooth scrollbars (theme-aware) */
+* { scrollbar-width: thin; scrollbar-color: var(--primary-300) var(--primary-900); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #1e3a5f; }
-::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--primary-900); }
+::-webkit-scrollbar-thumb { background: var(--primary-300); border-radius: 3px; }

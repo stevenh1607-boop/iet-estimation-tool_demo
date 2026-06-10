@@ -570,7 +570,7 @@ function Card({ children, className="" }) {
 }
 
 function SectionHeader({ color="orange", title, subtitle }) {
-  const c = { blue:"bg-blue-700", orange:"bg-orange-600", green:"bg-green-700",
+  const c = { blue:"bg-[var(--primary-700)]", orange:"bg-orange-600", green:"bg-green-700",
               purple:"bg-purple-700", teal:"bg-teal-700", gray:"bg-gray-600" }[color]||"bg-gray-600";
   return (
     <div className={`px-3 py-2 ${c} text-white`}>
@@ -637,29 +637,29 @@ function InvestmentSetup({ inv, onChange }) {
             <div className="col-span-3">
               <label className="text-xs font-semibold text-gray-600 block mb-1">Investment Name <span className="text-red-500">*</span></label>
               <input value={inv.name} onChange={e=>upd("name",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Investment Number</label>
               <input value={inv.number} onChange={e=>upd("number",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">WACS Number</label>
               <input value={inv.wacs} onChange={e=>upd("wacs",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]" />
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Investment Type</label>
               <select value={inv.type} onChange={e=>upd("type",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 <option>Internally Funded</option><option>Commercially Funded</option>
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Estimate Class</label>
               <select value={inv.estClass} onChange={e=>upd("estClass",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 {["Class 1","Class 2","Class 3","Class 4","Class 5"].map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
@@ -671,7 +671,7 @@ function InvestmentSetup({ inv, onChange }) {
               <div className="relative">
                 <select value={inv.revision} onChange={e=>upd("revision",e.target.value)}
                   disabled={!upd||inv._locked}
-                  className={`w-full border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 ${
+                  className={`w-full border rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] ${
                     inv._locked ? "bg-green-50 border-green-300 text-green-800 font-bold cursor-not-allowed" : "border-gray-300 bg-white"
                   }`}>
                   {["A","B","C","D","E","F","G","H"].map(r=><option key={r}>{r}</option>)}
@@ -682,28 +682,28 @@ function InvestmentSetup({ inv, onChange }) {
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Complexity</label>
               <select value={inv.complexity} onChange={e=>upd("complexity",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 {["Medium","High","Very High"].map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">New Technology</label>
               <select value={inv.newTech} onChange={e=>upd("newTech",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 {["Limited","Moderate","Substantial"].map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Estimated By</label>
               <select value={inv.estimatedBy} onChange={e=>upd("estimatedBy",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 {ESTIMATORS.map(n=><option key={n}>{n}</option>)}
               </select>
             </div>
             <div>
               <label className="text-xs font-semibold text-gray-600 block mb-1">Reviewed By</label>
               <select value={inv.reviewedBy} onChange={e=>upd("reviewedBy",e.target.value)}
-                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                 {REVIEWERS.map(n=><option key={n}>{n}</option>)}
               </select>
             </div>
@@ -805,13 +805,13 @@ function InvestmentSetup({ inv, onChange }) {
               );})()}
               {(inv.milestones||[]).length < 10 &&
                 <button onClick={()=>upd("milestones",[...(inv.milestones||[]),{stage:"",month:"",pct:"0"}])}
-                  className="text-xs text-blue-600 hover:underline">+ Add milestone</button>}
+                  className="text-xs text-[var(--primary-600)] hover:underline">+ Add milestone</button>}
             </div>
           </div>
         </Card>
 
         <div className="flex justify-end gap-3 pb-4">
-          <button className="px-6 py-2 text-xs bg-blue-700 hover:bg-blue-600 text-white rounded font-semibold shadow">
+          <button className="px-6 py-2 text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white rounded font-semibold shadow">
             Save Investment Setup →
           </button>
         </div>
@@ -885,17 +885,17 @@ function WBSNavTree({ wbs, supply, activePhase, setActivePhase, selectedL4, onSe
         <div
           onClick={()=>{ if(isLeaf) onSelectL4(node.code); else toggle(node.code); }}
           className={`flex items-center gap-1 py-1 px-2 cursor-pointer rounded text-xs transition-colors
-            ${isPhase ? "font-bold text-blue-300 hover:bg-blue-900" : ""}
-            ${isSel ? "bg-blue-600 text-white" : !isPhase ? "text-gray-300 hover:bg-gray-700" : ""}
+            ${isPhase ? "font-bold text-[var(--primary-300)] hover:bg-[var(--primary-900)]" : ""}
+            ${isSel ? "bg-[var(--primary-600)] text-white" : !isPhase ? "text-gray-300 hover:bg-gray-700" : ""}
           `}
           style={{paddingLeft:`${8+depth*12}px`}}>
           <span className="w-3 text-center text-gray-500 flex-shrink-0">
             {isLeaf ? "·" : (exp ? "▾" : "▸")}
           </span>
-          <span className={`font-mono text-xs flex-shrink-0 ${isSel?"text-blue-200":"text-gray-500"}`}>{node.code}</span>
+          <span className={`font-mono text-xs flex-shrink-0 ${isSel?"text-[var(--primary-200)]":"text-gray-500"}`}>{node.code}</span>
           <span className="ml-1 truncate">{node.label}</span>
           {count > 0 && !isLeaf && (
-            <span className={`ml-auto flex-shrink-0 text-xs px-1 rounded ${isSel?"bg-blue-500 text-white":"bg-gray-700 text-gray-400"}`}>{count}</span>
+            <span className={`ml-auto flex-shrink-0 text-xs px-1 rounded ${isSel?"bg-[var(--primary-500)] text-white":"bg-gray-700 text-gray-400"}`}>{count}</span>
           )}
         </div>
         {!isLeaf && exp && node.children.map(child=>renderNode(child, depth+1))}
@@ -916,7 +916,7 @@ function WBSNavTree({ wbs, supply, activePhase, setActivePhase, selectedL4, onSe
       <div className="p-2 border-b border-gray-700">
         <input value={searchText.nav||""} onChange={e=>searchText.setNav(e.target.value)}
           placeholder="Search WBS…"
-          className="w-full bg-gray-800 text-white text-xs px-2 py-1.5 rounded border border-gray-700 placeholder-gray-500 focus:outline-none focus:border-blue-500" />
+          className="w-full bg-gray-800 text-white text-xs px-2 py-1.5 rounded border border-gray-700 placeholder-gray-500 focus:outline-none focus:border-[var(--primary-500)]" />
       </div>
       <div className="flex border-b border-gray-700 overflow-x-auto">
         {phases.map(p=>(
@@ -962,10 +962,10 @@ function InvMatsLookup({ wbsCode }) {
   return (
     <div className="border-t border-gray-100 mt-2">
       <button onClick={()=>setOpen(o=>!o)}
-        className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-900 py-1.5 font-medium w-full">
+        className="flex items-center gap-1.5 text-xs text-[var(--primary-700)] hover:text-[var(--primary-900)] py-1.5 font-medium w-full">
         <span>{open ? "▾" : "▸"}</span>
         <span>📦 Inventory Materials & Assemblies Lookup</span>
-        {matchAssembly && <span className="bg-blue-100 text-blue-700 rounded px-1.5 py-0.5 text-[10px] ml-1">Assembly available</span>}
+        {matchAssembly && <span className="bg-[var(--primary-100)] text-[var(--primary-700)] rounded px-1.5 py-0.5 text-[10px] ml-1">Assembly available</span>}
       </button>
 
       {open && (
@@ -977,7 +977,7 @@ function InvMatsLookup({ wbsCode }) {
               {id:"inventory", label:"📋 Inventory Materials"},
             ].map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
-                className={`text-xs px-3 py-2 font-medium border-b-2 transition-colors ${tab===t.id?"border-blue-600 text-blue-700":"border-transparent text-gray-500 hover:text-gray-700"}`}>
+                className={`text-xs px-3 py-2 font-medium border-b-2 transition-colors ${tab===t.id?"border-[var(--primary-600)] text-[var(--primary-700)]":"border-transparent text-gray-500 hover:text-gray-700"}`}>
                 {t.label}
               </button>
             ))}
@@ -993,7 +993,7 @@ function InvMatsLookup({ wbsCode }) {
                       <div className="text-[10px] text-gray-400">{matchAssembly.wbs_code} · Ref: {matchAssembly.reference||"—"}</div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-bold text-blue-700">{matchAssembly.total_cost ? `$${matchAssembly.total_cost.toFixed(2)}` : "—"}</div>
+                      <div className="text-xs font-bold text-[var(--primary-700)]">{matchAssembly.total_cost ? `$${matchAssembly.total_cost.toFixed(2)}` : "—"}</div>
                       <div className="text-[10px] text-gray-400">total assembly cost</div>
                     </div>
                   </div>
@@ -1032,7 +1032,7 @@ function InvMatsLookup({ wbsCode }) {
             <div className="p-2">
               <input value={search} onChange={e=>setSearch(e.target.value)}
                 placeholder="Search inventory by description, item number or category…"
-                className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs mb-2 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs mb-2 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
               <div className="max-h-48 overflow-y-auto">
                 <table className="w-full text-[10px] border-collapse">
                   <thead className="sticky top-0 bg-gray-100">
@@ -1051,7 +1051,7 @@ function InvMatsLookup({ wbsCode }) {
                         <td className="px-2 py-0.5 text-gray-700">{item.description}</td>
                         <td className="px-2 py-0.5 text-gray-400">{item.category}</td>
                         <td className="px-2 py-0.5 text-gray-400">{item.uom}</td>
-                        <td className="px-2 py-0.5 text-right font-semibold text-blue-700">{fmtP(item.last_price)}</td>
+                        <td className="px-2 py-0.5 text-right font-semibold text-[var(--primary-700)]">{fmtP(item.last_price)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1375,14 +1375,14 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
               onKeyDown={e=>e.key==="Enter"&&tryResourceUnlock()}
               placeholder="PIN"
               autoFocus
-              className={`w-full text-center text-2xl font-mono tracking-widest border-2 rounded-lg px-3 py-3 mb-3 focus:outline-none ${resPinError?"border-red-500 bg-red-50 animate-pulse":"border-gray-300 focus:border-blue-500"}`}
+              className={`w-full text-center text-2xl font-mono tracking-widest border-2 rounded-lg px-3 py-3 mb-3 focus:outline-none ${resPinError?"border-red-500 bg-red-50 animate-pulse":"border-gray-300 focus:border-[var(--primary-500)]"}`}
             />
             {resPinError && <div className="text-xs text-red-600 text-center mb-2">Incorrect PIN — try again</div>}
             <div className="flex gap-2">
               <button onClick={()=>{setShowResourcePin(false);setResPinInput("");}}
                 className="flex-1 text-xs border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-50">Cancel</button>
               <button onClick={tryResourceUnlock}
-                className="flex-1 text-xs bg-blue-700 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold">Unlock</button>
+                className="flex-1 text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white py-2 rounded-lg font-semibold">Unlock</button>
             </div>
           </div>
         </div>
@@ -1416,10 +1416,10 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
               <div>Description / WBS</div>
               <div className="text-center">Hrs/Unit</div>
               <div className="text-center text-orange-700">Derived Qty</div>
-              <div className="text-center text-blue-700">Scale</div>
+              <div className="text-center text-[var(--primary-700)]">Scale</div>
               <div className="text-center text-teal-700">Scaled Hrs</div>
               <div className="text-center text-orange-500">Override</div>
-              <div className="text-right text-blue-800">EE Cost</div>
+              <div className="text-right text-[var(--primary-800)]">EE Cost</div>
               <div className="text-center">Profile</div>
             </div>
             <CommScrollList selectedCommGroup={selectedCommGroup}>
@@ -1432,7 +1432,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                       data-comm-group={l4}
                       className={`px-3 py-1 flex items-center gap-2 border-b-2 text-xs font-bold uppercase tracking-wide cursor-pointer transition-colors
                         ${l4===selectedCommGroup
-                          ? "bg-[#1e3a5f] text-white border-blue-400"
+                          ? "bg-[#1e3a5f] text-white border-[var(--primary-400)]"
                           : hasActive
                             ? "bg-teal-700 text-white border-teal-500"
                             : "bg-gray-100 text-gray-500 border-gray-300"}`}
@@ -1471,7 +1471,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                                   : item.wbs.startsWith("4.1.3.05")
                                   ? <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-700 border border-amber-300 rounded px-1 font-semibold">⚡ Enter hrs — PSN/CSN test count varies</span>
                                   : item.wbs.startsWith("4.1.2.06.7.04")
-                                  ? <span className="ml-1.5 text-[9px] bg-blue-100 text-blue-700 border border-blue-200 rounded px-1 font-semibold">Enter hrs — contractor supervision</span>
+                                  ? <span className="ml-1.5 text-[9px] bg-[var(--primary-100)] text-[var(--primary-700)] border border-[var(--primary-200)] rounded px-1 font-semibold">Enter hrs — contractor supervision</span>
                                   : <span className="ml-1.5 text-[9px] bg-teal-100 text-teal-700 border border-teal-200 rounded px-1 font-semibold">Estimator enters qty</span>
                               )}
                             </div>
@@ -1491,7 +1491,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               </span>
                             )}
                           </div>
-                          <div className={`text-center font-bold ${isActive&&item.scale<1?"text-blue-700":isActive?"text-gray-400":"text-gray-200"}`}>
+                          <div className={`text-center font-bold ${isActive&&item.scale<1?"text-[var(--primary-700)]":isActive?"text-gray-400":"text-gray-200"}`}>
                             {fmtPct(item.scale)}
                           </div>
                           <div className={`text-center font-bold ${isActive?"text-teal-700":"text-gray-300"}`}>
@@ -1504,7 +1504,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               className={`w-16 text-center border rounded py-0.5 text-xs font-bold focus:outline-none focus:ring-1
                                 ${isOvrd?"border-orange-400 bg-orange-50 text-orange-800":"border-gray-200 text-gray-400"}`}/>
                           </div>
-                          <div className={`text-right font-bold ${isActive?"text-blue-800":"text-gray-300"}`}>
+                          <div className={`text-right font-bold ${isActive?"text-[var(--primary-800)]":"text-gray-300"}`}>
                             {(isActive) ? fmt(cost) : "—"}
                           </div>
                           <div className="text-center">
@@ -1540,7 +1540,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                   <div className="font-mono text-gray-400">{l4}</div>
                   <div className="flex justify-between">
                     <span className="text-teal-700 font-bold">{fmtHrs(g.totalHrs)}</span>
-                    <span className="text-blue-800 font-bold">{fmt(g.totalCost)}</span>
+                    <span className="text-[var(--primary-800)] font-bold">{fmt(g.totalCost)}</span>
                   </div>
                 </div>
               ))}
@@ -1552,7 +1552,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
               <div className="flex justify-between text-xs font-bold text-teal-700 border-b pb-1 mb-1">
                 <span>Total Comm Hrs</span><span>{fmtHrs(commGrandHrs)}</span>
               </div>
-              <div className="py-1.5 px-2 bg-blue-800 rounded text-white flex justify-between mb-1">
+              <div className="py-1.5 px-2 bg-[var(--primary-800)] rounded text-white flex justify-between mb-1">
                 <span className="text-xs font-semibold">EE Internal</span>
                 <span className="text-xs font-bold">{fmt(commGrandCost)}</span>
               </div>
@@ -1568,7 +1568,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <div className="bg-white border-b px-4 py-2 flex items-center justify-between flex-shrink-0">
           <div>
-            <div className="font-bold text-blue-900 text-sm">{selectedL4} — {l4label}</div>
+            <div className="font-bold text-[var(--primary-900)] text-sm">{selectedL4} — {l4label}</div>
             <div className="text-xs text-gray-400 flex items-center gap-2">
               {items.length} items · Click ▸ to expand cost detail
               {items.some(i=>i._priceFromEquipPricing) && (
@@ -1607,17 +1607,17 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
             const c = calcItem(item);
             const delivery = ln.delivery || item.delivery_method || "EE Delivered";
             const isContr  = delivery === "Contractor Delivered";
-            const rowBase  = hasQty?"bg-blue-50 border-l-4 border-l-blue-500":idx%2===0?"bg-white":"bg-gray-50";
+            const rowBase  = hasQty?"bg-[var(--primary-50)] border-l-4 border-l-[var(--primary-500)]":idx%2===0?"bg-white":"bg-gray-50";
             return (
               <div key={item.wbs_code} className={`border-b ${rowBase} transition-colors`}>
                 <div className="grid items-center px-3 py-2 text-xs"
                   style={{gridTemplateColumns:"16px 1fr 46px 72px 64px 90px 56px"}}>
                   <button onClick={()=>setExpandedRows(p=>({...p,[item.wbs_code]:!p[item.wbs_code]}))}
-                    className={`text-center rounded text-xs w-4 h-4 flex items-center justify-center ${isExp?"bg-blue-600 text-white":"text-gray-300 hover:text-blue-500"}`}>
+                    className={`text-center rounded text-xs w-4 h-4 flex items-center justify-center ${isExp?"bg-[var(--primary-600)] text-white":"text-gray-300 hover:text-[var(--primary-500)]"}`}>
                     {isExp?"▾":"▸"}
                   </button>
                   <div className="min-w-0 pr-2">
-                    <div className={`font-medium truncate ${hasQty?"text-blue-900":"text-gray-800"}`}>{item.description}</div>
+                    <div className={`font-medium truncate ${hasQty?"text-[var(--primary-900)]":"text-gray-800"}`}>{item.description}</div>
                     <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                       <span className="text-gray-400 font-mono text-xs">{item.wbs_code}</span>
                       {item.scope === "Install" && !item.install_wbs && (
@@ -1632,7 +1632,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <span className="text-xs text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">{item.resource_main}</span>
                       }
                       {item.resource_install && item.install_hrs_per>0 &&
-                        <span className="text-xs text-blue-500 bg-blue-50 border border-blue-200 rounded px-1">Install: {resourceOvrd[item.install_wbs]?.install || item.resource_install}</span>}
+                        <span className="text-xs text-[var(--primary-500)] bg-[var(--primary-50)] border border-[var(--primary-200)] rounded px-1">Install: {resourceOvrd[item.install_wbs]?.install || item.resource_install}</span>}
                       {isWAFHAItem(item) &&
                         <span className="text-xs text-amber-700 bg-amber-50 border border-amber-300 rounded px-1 font-semibold">WAFHA · day rate</span>}
                     </div>
@@ -1648,7 +1648,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                     <input type="number" min="0.1" step="0.1" value={factor}
                       onChange={e=>updLine(item.wbs_code,"factor",e.target.value)}
                       onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
-                      className={`w-14 text-center border rounded py-0.5 text-xs focus:outline-none focus:ring-1 ${parseFloat(factor)!==1?"border-blue-400 bg-blue-50 text-blue-800 font-bold":"border-gray-200 text-gray-500"}`}/>
+                      className={`w-14 text-center border rounded py-0.5 text-xs focus:outline-none focus:ring-1 ${parseFloat(factor)!==1?"border-[var(--primary-400)] bg-[var(--primary-50)] text-[var(--primary-800)] font-bold":"border-gray-200 text-gray-500"}`}/>
                   </div>
                   <div className="text-center">
                     {isWAFHAItem(item)
@@ -1664,22 +1664,22 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                 </div>
 
                 {isExp && (
-                  <div className="mx-3 mb-3 rounded-lg border border-blue-200 bg-white shadow-sm overflow-hidden">
-                    <div className="bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 flex items-center justify-between">
+                  <div className="mx-3 mb-3 rounded-lg border border-[var(--primary-200)] bg-white shadow-sm overflow-hidden">
+                    <div className="bg-[var(--primary-700)] text-white text-xs font-semibold px-3 py-1.5 flex items-center justify-between">
                       <span className="flex items-center gap-2">
                         Cost Detail — {item.description?.split(" - ")[0]}
                         {item.comments && (
                           <span className="relative group">
-                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-400 text-white text-xs cursor-help hover:bg-white hover:text-blue-700 font-bold">i</span>
+                            <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-[var(--primary-400)] text-white text-xs cursor-help hover:bg-white hover:text-[var(--primary-700)] font-bold">i</span>
                             <span className="invisible group-hover:visible absolute left-0 top-6 z-50 w-80 bg-gray-900 text-white text-xs font-normal rounded-lg shadow-xl p-3 leading-relaxed">
-                              <span className="block font-bold text-blue-300 mb-1">Database & Scope Notes</span>
+                              <span className="block font-bold text-[var(--primary-300)] mb-1">Database & Scope Notes</span>
                               {item.comments}
                             </span>
                           </span>
                         )}
                       </span>
                       <span className="flex items-center gap-3">
-                        <span className="text-blue-200 font-normal">
+                        <span className="text-[var(--primary-200)] font-normal">
                           {isContr
                             ? `Contractor · Install: ${item.resource_install||item.resource_main||"—"} · Comm: ${item.resource_comm||"—"}`
                             : `${item.resource_main||"EE"} · Install: ${item.resource_install||item.resource_main||"—"} · Comm: ${item.resource_comm||"—"}`
@@ -1696,7 +1696,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                         <div>
                           <label className="text-xs text-gray-500 block mb-0.5">Delivery Method</label>
                           <select value={delivery} onChange={e=>updLine(item.wbs_code,"delivery",e.target.value)}
-                            className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white w-full focus:outline-none focus:ring-1 focus:ring-blue-400">
+                            className="text-xs border border-gray-300 rounded px-1.5 py-1 bg-white w-full focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                             <option>EE Delivered</option><option>Contractor Delivered</option>
                           </select>
                         </div>
@@ -1813,7 +1813,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <input type="number" min="0" value={ln.plant||""} placeholder="0"
                             onChange={e=>updLine(item.wbs_code,"plant",e.target.value)}
                             onKeyDown={e=>e.key==="Enter"&&e.currentTarget.blur()}
-                            className="w-full text-xs border border-blue-200 bg-blue-50 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                            className="w-full text-xs border border-[var(--primary-200)] bg-[var(--primary-50)] rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--primary-300)]"/>
                         </div>
                         {hasQty && (
                           <div className="col-span-2 bg-gray-50 rounded border border-gray-200 p-2 text-xs">
@@ -1825,7 +1825,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                               {c.plantFact>0&&<div className="flex justify-between"><span className="text-gray-500">Plant (×factor)</span><span className="font-medium">{fmt(c.plantFact)}</span></div>}
                               {c.matBurden>0&&<div className="flex justify-between"><span className="text-gray-500">Mat. Burden</span><span className="font-medium">{fmt(c.matBurden)}</span></div>}
                               <div className="border-t border-gray-200 mt-1 pt-1 flex justify-between font-bold">
-                                <span className="text-blue-800">EE Internal</span><span className="text-blue-800">{fmt(c.eeInt)}</span>
+                                <span className="text-[var(--primary-800)]">EE Internal</span><span className="text-[var(--primary-800)]">{fmt(c.eeInt)}</span>
                               </div>
                               <div className="flex justify-between font-bold">
                                 <span className="text-orange-700">Commercial</span><span className="text-orange-700">{fmt(c.comm)}</span>
@@ -1841,10 +1841,10 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                             <input value={ln.drawing||""}
                               onChange={e=>updLine(item.wbs_code,"drawing",e.target.value)}
                               placeholder="Drawing no. or https://..."
-                              className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                              className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--primary-300)]"/>
                             {(ln.drawing||"").startsWith("http") && (
                               <a href={ln.drawing} target="_blank" rel="noopener noreferrer"
-                                className="flex-shrink-0 text-xs bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 rounded px-2 py-1 flex items-center gap-1 font-medium">
+                                className="flex-shrink-0 text-xs bg-[var(--primary-50)] border border-[var(--primary-200)] text-[var(--primary-700)] hover:bg-[var(--primary-100)] rounded px-2 py-1 flex items-center gap-1 font-medium">
                                 🔗 Open
                               </a>
                             )}
@@ -1854,7 +1854,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                           <label className="text-xs text-gray-500 block mb-1">Comments / Scope inclusions & exclusions</label>
                           <textarea value={ln.comments||""} onChange={e=>updLine(item.wbs_code,"comments",e.target.value)}
                             rows={2} placeholder="e.g. Includes conductor and insulators. Excludes foundation design."
-                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+                            className="w-full text-xs border border-gray-200 rounded px-2 py-1 resize-none focus:outline-none focus:ring-1 focus:ring-[var(--primary-300)]"/>
                         </div>
                       </div>
                     </div>
@@ -1912,7 +1912,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                       </div>
                       <div className="text-center text-[9px] text-gray-400 truncate px-1">{agg.delivery}</div>
                       <div className="text-right">
-                        <div className={`text-xs font-bold ${hasHrs?"text-blue-800":"text-gray-300"}`}>{hasHrs?fmt(isCommercial?agg.comm:agg.eeInt):"—"}</div>
+                        <div className={`text-xs font-bold ${hasHrs?"text-[var(--primary-800)]":"text-gray-300"}`}>{hasHrs?fmt(isCommercial?agg.comm:agg.eeInt):"—"}</div>
                         {hasHrs&&agg.isContr&&<div className="text-[9px] text-teal-600">Contractor</div>}
                       </div>
                       <div className="text-center text-[9px] text-gray-500 truncate px-1">{agg.resName.split(" ").slice(-2).join(" ")}</div>
@@ -2048,8 +2048,8 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
       <div className="w-56 bg-white border-l flex flex-col overflow-hidden flex-shrink-0">
         <div className="bg-orange-700 text-white text-xs font-bold px-3 py-2 uppercase tracking-wide">Live Cost Display</div>
         <div className="flex-1 overflow-y-auto">
-          <div className="px-3 py-2 bg-blue-50 border-b">
-            <div className="text-xs font-bold text-blue-800 mb-2 uppercase tracking-wide truncate">{l4label}</div>
+          <div className="px-3 py-2 bg-[var(--primary-50)] border-b">
+            <div className="text-xs font-bold text-[var(--primary-800)] mb-2 uppercase tracking-wide truncate">{l4label}</div>
             {[
               {label:"Install Hours (excl. WAFHA)",value:fmtHrs(groupTotals.installHrs),color:"text-purple-700",bg:"bg-purple-50 border border-purple-100"},
             ].map(r=>(
@@ -2058,10 +2058,10 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                 <span className={`text-xs font-bold ${r.color}`}>{r.value}</span>
               </div>
             ))}
-            <div className="my-2 border-t border-blue-200"/>
-            <div className="flex justify-between items-center py-1.5 px-2 rounded bg-blue-100 mb-1">
-              <span className="text-xs font-semibold text-blue-800">EE Internal</span>
-              <span className="text-xs font-bold text-blue-900">{fmt(groupTotals.eeTotal)}</span>
+            <div className="my-2 border-t border-[var(--primary-200)]"/>
+            <div className="flex justify-between items-center py-1.5 px-2 rounded bg-[var(--primary-100)] mb-1">
+              <span className="text-xs font-semibold text-[var(--primary-800)]">EE Internal</span>
+              <span className="text-xs font-bold text-[var(--primary-900)]">{fmt(groupTotals.eeTotal)}</span>
             </div>
             <div className="flex justify-between items-center py-1.5 px-2 rounded bg-orange-100">
               <span className="text-xs font-semibold text-orange-800">Commercial</span>
@@ -2079,7 +2079,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
                 <span className={`text-xs font-bold ${r.color}`}>{r.value}</span>
               </div>
             ))}
-            <div className="mt-2 py-1.5 px-2 bg-blue-800 rounded text-white flex justify-between items-center mb-1">
+            <div className="mt-2 py-1.5 px-2 bg-[var(--primary-800)] rounded text-white flex justify-between items-center mb-1">
               <span className="text-xs font-semibold">EE Internal Total</span>
               <span className="text-xs font-bold">{fmt(investTotals.eeTotal)}</span>
             </div>
@@ -2178,7 +2178,7 @@ function ReviewLines({ lines, isCommercial }) {
         {/* ── Summary bar ── */}
         <div className={`bg-white rounded-lg border border-gray-200 shadow-sm p-4 grid gap-4 ${isCommercial?"grid-cols-5":"grid-cols-4"}`}>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-800">{entered.length}</div>
+            <div className="text-2xl font-bold text-[var(--primary-800)]">{entered.length}</div>
             <div className="text-xs text-gray-500">Supply Lines</div>
           </div>
           <div className="text-center">
@@ -2190,7 +2190,7 @@ function ReviewLines({ lines, isCommercial }) {
             <div className="text-xs text-gray-500">Comm Hours (Ph.4)</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl font-bold text-blue-900">{fmt(totals.eeInt+phase4Totals.eeInt)}</div>
+            <div className="text-2xl font-bold text-[var(--primary-900)]">{fmt(totals.eeInt+phase4Totals.eeInt)}</div>
             <div className="text-xs text-gray-500">EE Internal Total</div>
           </div>
           {isCommercial && (
@@ -2217,7 +2217,7 @@ function ReviewLines({ lines, isCommercial }) {
                   <th className="text-center px-3 py-2 font-semibold text-gray-500">Factor</th>
                   <th className="text-center px-3 py-2 font-semibold text-gray-500">UOM</th>
                   <th className="text-right px-3 py-2 font-semibold text-purple-600 whitespace-nowrap">Install Hrs</th>
-                  <th className="text-right px-3 py-2 font-semibold text-blue-700 whitespace-nowrap">EE Internal</th>
+                  <th className="text-right px-3 py-2 font-semibold text-[var(--primary-700)] whitespace-nowrap">EE Internal</th>
                   {isCommercial && <th className="text-right px-3 py-2 font-semibold text-orange-700 whitespace-nowrap">Commercial</th>}
                   <th className="text-left px-3 py-2 font-semibold text-gray-500">Delivery</th>
                 </tr>
@@ -2227,14 +2227,14 @@ function ReviewLines({ lines, isCommercial }) {
                   const ln=lines[item.wbs_code]||{};
                   const c=calcLine(item,ln.qty||"",ln.factor||"1",ln.delivery,ln.instHrsOvrd,ln.contrRate,ln.plant,ln.mats,isCommercial,ln.resourceOvrd,null,0);
                   return (
-                    <tr key={item.wbs_code} className={`border-b ${i%2===0?"bg-white":"bg-gray-50"} hover:bg-blue-50`}>
-                      <td className="px-3 py-1.5 font-mono text-blue-600 whitespace-nowrap text-[11px]">{item.wbs_code}</td>
+                    <tr key={item.wbs_code} className={`border-b ${i%2===0?"bg-white":"bg-gray-50"} hover:bg-[var(--primary-50)]`}>
+                      <td className="px-3 py-1.5 font-mono text-[var(--primary-600)] whitespace-nowrap text-[11px]">{item.wbs_code}</td>
                       <td className="px-3 py-1.5 text-gray-800 max-w-xs truncate" title={item.description}>{item.description}</td>
                       <td className="px-3 py-1.5 text-center font-bold text-orange-700">{ln.qty}</td>
                       <td className="px-3 py-1.5 text-center text-gray-500">{ln.factor||"1"}</td>
                       <td className="px-3 py-1.5 text-center text-gray-500">{item.uom||"each"}</td>
                       <td className="px-3 py-1.5 text-right font-medium text-purple-700">{fmtHrs(c.installHrs)||"—"}</td>
-                      <td className="px-3 py-1.5 text-right font-bold text-blue-800">{fmt(c.eeInt)}</td>
+                      <td className="px-3 py-1.5 text-right font-bold text-[var(--primary-800)]">{fmt(c.eeInt)}</td>
                       {isCommercial && <td className="px-3 py-1.5 text-right font-bold text-orange-700">{fmt(c.comm)}</td>}
                       <td className="px-3 py-1.5 text-gray-500 text-[11px]">{c.isContr?"Contractor":"EE"}</td>
                     </tr>
@@ -2251,7 +2251,7 @@ function ReviewLines({ lines, isCommercial }) {
                       return a+c.installHrs;
                     },0))||"—"}
                   </td>
-                  <td className="px-3 py-1.5 text-right font-bold text-blue-900">
+                  <td className="px-3 py-1.5 text-right font-bold text-[var(--primary-900)]">
                     {fmt(items.reduce((a,item)=>{
                       const ln=lines[item.wbs_code]||{};
                       const c=calcLine(item,ln.qty||"",ln.factor||"1",ln.delivery,ln.instHrsOvrd,ln.contrRate,ln.plant,ln.mats,isCommercial,ln.resourceOvrd,null,0);
@@ -2287,9 +2287,9 @@ function ReviewLines({ lines, isCommercial }) {
                   <th className="text-left px-3 py-2 font-semibold text-gray-500">Resource</th>
                   <th className="text-center px-3 py-2 font-semibold text-orange-700 whitespace-nowrap">Qty</th>
                   <th className="text-center px-3 py-2 font-semibold text-gray-500 whitespace-nowrap">Hrs/Unit</th>
-                  <th className="text-center px-3 py-2 font-semibold text-blue-600 whitespace-nowrap">Scale</th>
+                  <th className="text-center px-3 py-2 font-semibold text-[var(--primary-600)] whitespace-nowrap">Scale</th>
                   <th className="text-right px-3 py-2 font-semibold text-teal-700 whitespace-nowrap">Comm Hrs</th>
-                  <th className="text-right px-3 py-2 font-semibold text-blue-700 whitespace-nowrap">EE Internal</th>
+                  <th className="text-right px-3 py-2 font-semibold text-[var(--primary-700)] whitespace-nowrap">EE Internal</th>
                   {isCommercial && <th className="text-right px-3 py-2 font-semibold text-orange-700 whitespace-nowrap">Commercial</th>}
                   <th className="text-left px-3 py-2 font-semibold text-gray-500">Type</th>
                 </tr>
@@ -2304,16 +2304,16 @@ function ReviewLines({ lines, isCommercial }) {
                       {row.derivedQty.toLocaleString("en-AU",{maximumFractionDigits:1})}
                     </td>
                     <td className="px-3 py-1.5 text-center text-gray-500">{row.data.hrs_per_unit||0}</td>
-                    <td className="px-3 py-1.5 text-center text-blue-600">
+                    <td className="px-3 py-1.5 text-center text-[var(--primary-600)]">
                       {row.scale < 1
-                        ? <span className="font-bold text-blue-700">{fmtPct(row.scale)}</span>
+                        ? <span className="font-bold text-[var(--primary-700)]">{fmtPct(row.scale)}</span>
                         : <span className="text-gray-400">—</span>}
                     </td>
                     <td className="px-3 py-1.5 text-right font-bold text-teal-700 whitespace-nowrap">
                       {fmtHrs(row.commHrs)}
                       {row.isHrsOvrd && <span className="ml-1 text-orange-500 text-[10px]">⚡ovrd</span>}
                     </td>
-                    <td className="px-3 py-1.5 text-right font-bold text-blue-800">{fmt(row.eeInt)}</td>
+                    <td className="px-3 py-1.5 text-right font-bold text-[var(--primary-800)]">{fmt(row.eeInt)}</td>
                     {isCommercial && <td className="px-3 py-1.5 text-right font-bold text-orange-700">{fmt(row.comm)}</td>}
                     <td className="px-3 py-1.5 text-[11px]">
                       {row.isDirect
@@ -2327,7 +2327,7 @@ function ReviewLines({ lines, isCommercial }) {
                 <tr>
                   <td colSpan={6} className="px-3 py-1.5 font-semibold text-teal-800 text-[11px]">Phase 4 totals (scale-adjusted)</td>
                   <td className="px-3 py-1.5 text-right font-bold text-teal-800">{fmtHrs(phase4Totals.commHrs)}</td>
-                  <td className="px-3 py-1.5 text-right font-bold text-blue-900">{fmt(phase4Totals.eeInt)}</td>
+                  <td className="px-3 py-1.5 text-right font-bold text-[var(--primary-900)]">{fmt(phase4Totals.eeInt)}</td>
                   {isCommercial && <td className="px-3 py-1.5 text-right font-bold text-orange-800">{fmt(phase4Totals.comm)}</td>}
                   <td/>
                 </tr>
@@ -2942,8 +2942,8 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
     }).sort() : [];
 
     const indent = depth * 16;
-    const bgColors = ["","bg-blue-50","bg-indigo-50","bg-gray-50","bg-white","bg-white"];
-    const textColors = ["","text-blue-900","text-indigo-800","text-gray-800","text-gray-700","text-gray-600"];
+    const bgColors = ["","bg-[var(--primary-50)]","bg-indigo-50","bg-gray-50","bg-white","bg-white"];
+    const textColors = ["","text-[var(--primary-900)]","text-indigo-800","text-gray-800","text-gray-700","text-gray-600"];
     const fontWeights = ["","font-bold","font-bold","font-semibold","font-medium","font-normal"];
 
     return (
@@ -2966,7 +2966,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
             {/* Comm hrs shown only at Phase 4 level via footer total */}
             {code==="4"&&commGrandHrs>0?<span className="font-bold">{fmtHrs(commGrandHrs)}</span>:"—"}
           </div>
-          <div className={`py-1.5 text-right pr-2 text-blue-800 ${depth<=2?"font-bold":"font-medium"}`}>{fmt(roll.eeInt)}</div>
+          <div className={`py-1.5 text-right pr-2 text-[var(--primary-800)] ${depth<=2?"font-bold":"font-medium"}`}>{fmt(roll.eeInt)}</div>
           {isCommercial && <div className={`py-1.5 text-right pr-2 text-orange-700 ${depth<=2?"font-bold":"font-medium"}`}>{fmt(roll.comm)}</div>}
         </div>
         {isOpen && !isLeaf && childCodes.map(child=>renderWBSNode(child, depth+1))}
@@ -3019,7 +3019,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
             <div key={ph} className="bg-white rounded-lg border border-gray-200 p-3 text-center shadow-sm">
               <div className="text-xs font-bold text-gray-500 mb-1">Phase {ph} — {phaseNames[ph]||ph}</div>
               {ph==="4" && <div className="text-xs text-teal-600 mb-1">auto-derived</div>}
-              <div className="text-sm font-bold text-blue-800">{fmt(p.eeInt)}</div>
+              <div className="text-sm font-bold text-[var(--primary-800)]">{fmt(p.eeInt)}</div>
               {isCommercial && <div className="text-xs font-bold text-orange-700">{fmt(p.comm)}</div>}
               {p.installHrs>0 && <div className="text-xs text-purple-600 mt-1">{fmtHrs(p.installHrs)} install hrs</div>}
               {ph==="4" && p.commHrs>0 && <div className="text-xs text-teal-600 mt-0.5">{fmtHrs(p.commHrs)} comm hrs</div>}
@@ -3033,15 +3033,15 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
         {/* WBS Cost Tree — default all closed, expandable to L5 */}
         {phaseNodes.length > 0 && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2 bg-blue-800 text-white">
+            <div className="flex items-center justify-between px-4 py-2 bg-[var(--primary-800)] text-white">
               <div className="font-bold text-sm">WBS Cost Breakdown</div>
               <div className="flex items-center gap-2">
-                <button onClick={()=>setOpenNodes({})} className="text-xs bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded">Collapse All</button>
+                <button onClick={()=>setOpenNodes({})} className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] px-2 py-1 rounded">Collapse All</button>
                 <button onClick={()=>{
                   const all={};
                   Object.keys(nodeRollup).filter(k=>k.split('.').length<5).forEach(k=>{all[k]=true;});
                   setOpenNodes(all);
-                }} className="text-xs bg-blue-700 hover:bg-blue-600 px-2 py-1 rounded">Expand All</button>
+                }} className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] px-2 py-1 rounded">Expand All</button>
               </div>
             </div>
             {/* Column headers */}
@@ -3050,7 +3050,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
               <div className="px-3 py-2">WBS / Description</div>
               <div className="py-2 text-center text-purple-600">Install Hrs</div>
               <div className="py-2 text-center text-teal-600 whitespace-nowrap">Comm Hrs<div className="text-[9px] font-normal text-gray-400">(Ph.4 derived)</div></div>
-              <div className="py-2 text-right pr-2 text-blue-700">EE Internal</div>
+              <div className="py-2 text-right pr-2 text-[var(--primary-700)]">EE Internal</div>
               {isCommercial && <div className="py-2 text-right pr-2 text-orange-700">Commercial</div>}
             </div>
             {/* Phase nodes — all closed by default */}
@@ -3061,7 +3061,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
               <div className="px-3 py-2 text-gray-700">Total (excl. contingency)</div>
               <div className="py-2 text-center text-purple-700">{Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.installHrs,0)>0?fmtHrs(Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.installHrs,0)):"—"}</div>
               <div className="py-2 text-center text-teal-700">{commGrandHrs>0?fmtHrs(commGrandHrs):"—"}</div>
-              <div className="py-2 text-right pr-2 text-blue-900 text-sm">{fmt(grandEE)}</div>
+              <div className="py-2 text-right pr-2 text-[var(--primary-900)] text-sm">{fmt(grandEE)}</div>
               {isCommercial && <div className="py-2 text-right pr-2 text-orange-800 text-sm">{fmt(grandComm)}</div>}
             </div>
           </div>
@@ -3073,14 +3073,14 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
             {/* Contingency row */}
             <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
               <div className="px-4 py-2 text-gray-600 font-medium">Base Estimate (excl. contingency &amp; escalation)</div>
-              <div className="py-2 text-right pr-4 font-bold text-blue-900">{fmt(grandEE)}</div>
+              <div className="py-2 text-right pr-4 font-bold text-[var(--primary-900)]">{fmt(grandEE)}</div>
               {isCommercial && <div className="py-2 text-right pr-4 font-bold text-orange-800">{fmt(grandComm)}</div>}
             </div>
             <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
               <div className="px-4 py-2 text-gray-600">
                 Contingency ({contPct}%)
               </div>
-              <div className="py-2 text-right pr-4 text-blue-600 font-medium">{fmt(contAmt * (grandEE/(grandComm||grandEE)))}</div>
+              <div className="py-2 text-right pr-4 text-[var(--primary-600)] font-medium">{fmt(contAmt * (grandEE/(grandComm||grandEE)))}</div>
               {isCommercial && <div className="py-2 text-right pr-4 text-orange-600 font-medium">{fmt(contAmt)}</div>}
             </div>
 
@@ -3117,7 +3117,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
             )}
 
             {/* FINAL TOTAL */}
-            <div className="grid font-bold text-sm bg-blue-900 text-white"
+            <div className="grid font-bold text-sm bg-[var(--primary-900)] text-white"
               style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
               <div className="px-4 py-3.5">
                 TOTAL — Base + Contingency + Escalation
@@ -3148,14 +3148,14 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
 // Manager / senior stakeholder view — read-only portfolio overview
 const STATUS_CFG = {
   "Draft":      { bg:"bg-gray-100",     text:"text-gray-600",   dot:"bg-gray-400"   },
-  "In Review":  { bg:"bg-blue-100",     text:"text-blue-700",   dot:"bg-blue-500"   },
+  "In Review":  { bg:"bg-[var(--primary-100)]",     text:"text-[var(--primary-700)]",   dot:"bg-[var(--primary-500)]"   },
   "Approved":   { bg:"bg-green-100",    text:"text-green-700",  dot:"bg-green-500"  },
   "On Hold":    { bg:"bg-yellow-100",   text:"text-yellow-700", dot:"bg-yellow-500" },
   "Rejected":   { bg:"bg-red-100",      text:"text-red-700",    dot:"bg-red-500"    },
 };
 const CLASS_COLOR = {
   "Class 1":"bg-red-100 text-red-700","Class 2":"bg-orange-100 text-orange-700",
-  "Class 3":"bg-yellow-100 text-yellow-700","Class 4":"bg-blue-100 text-blue-700",
+  "Class 3":"bg-yellow-100 text-yellow-700","Class 4":"bg-[var(--primary-100)] text-[var(--primary-700)]",
   "Class 5":"bg-green-100 text-green-700",
 };
 
@@ -3768,7 +3768,7 @@ const IET_TEMPLATES = [
 ];
 
 const CATEGORY_COLORS = {
-  "Zone Substation":      "bg-blue-100 text-blue-700 border border-blue-200",
+  "Zone Substation":      "bg-[var(--primary-100)] text-[var(--primary-700)] border border-[var(--primary-200)]",
   "Subtransmission Mains":"bg-orange-100 text-orange-700 border border-orange-200",
   "SCADA & Comms":        "bg-purple-100 text-purple-700 border border-purple-200",
   "Distribution":         "bg-green-100 text-green-700 border border-green-200",
@@ -3918,9 +3918,9 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
             <div className="bg-[#1e3a5f] text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
               <div>
                 <div className="font-bold text-sm">Save Current Estimate as Template</div>
-                <div className="text-blue-300 text-xs mt-0.5">{currentQtyLines.length} scope lines · Class 5</div>
+                <div className="text-[var(--primary-300)] text-xs mt-0.5">{currentQtyLines.length} scope lines · Class 5</div>
               </div>
-              <button onClick={()=>setShowSaveModal(false)} className="text-blue-300 hover:text-white text-lg leading-none">✕</button>
+              <button onClick={()=>setShowSaveModal(false)} className="text-[var(--primary-300)] hover:text-white text-lg leading-none">✕</button>
             </div>
 
             {saveSuccess ? (
@@ -3932,17 +3932,17 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
             ) : (
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {/* Source info */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                <div className="bg-[var(--primary-50)] border border-[var(--primary-200)] rounded-lg p-3 text-xs text-[var(--primary-800)]">
                   <div className="font-semibold mb-1">Source estimate</div>
-                  <div className="text-blue-700">{currentInv?.name || "Unnamed"} · {currentInv?.estClass} · {currentQtyLines.length} lines with quantities</div>
-                  <div className="text-blue-500 mt-0.5">All current quantities, factors and delivery methods will be saved into the template.</div>
+                  <div className="text-[var(--primary-700)]">{currentInv?.name || "Unnamed"} · {currentInv?.estClass} · {currentQtyLines.length} lines with quantities</div>
+                  <div className="text-[var(--primary-500)] mt-0.5">All current quantities, factors and delivery methods will be saved into the template.</div>
                 </div>
 
                 {/* Name */}
                 <div>
                   <label className="text-xs font-semibold text-gray-600 block mb-1">Template Name *</label>
                   <input value={saveForm.name} onChange={e=>setSaveForm(p=>({...p,name:e.target.value}))}
-                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"
                     placeholder="e.g. 132kV 3-Bay Zone Substation"/>
                 </div>
 
@@ -3970,7 +3970,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
                   <div className="flex flex-wrap gap-1.5">
                     {ICONS.map(ic=>(
                       <button key={ic} onClick={()=>setSaveForm(p=>({...p,icon:ic}))}
-                        className={`text-xl w-9 h-9 flex items-center justify-center rounded border-2 transition-colors ${saveForm.icon===ic?"border-blue-500 bg-blue-50":"border-gray-200 hover:border-blue-300"}`}>
+                        className={`text-xl w-9 h-9 flex items-center justify-center rounded border-2 transition-colors ${saveForm.icon===ic?"border-[var(--primary-500)] bg-[var(--primary-50)]":"border-gray-200 hover:border-[var(--primary-300)]"}`}>
                         {ic}
                       </button>
                     ))}
@@ -3982,7 +3982,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
                   <label className="text-xs font-semibold text-gray-600 block mb-1">Description</label>
                   <textarea value={saveForm.description} onChange={e=>setSaveForm(p=>({...p,description:e.target.value}))}
                     rows={2} placeholder="Brief description of what this template covers…"
-                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                 </div>
 
                 {/* Tags */}
@@ -3990,7 +3990,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
                   <label className="text-xs font-semibold text-gray-600 block mb-1">Tags <span className="font-normal text-gray-400">(comma-separated)</span></label>
                   <input value={saveForm.tags} onChange={e=>setSaveForm(p=>({...p,tags:e.target.value}))}
                     placeholder="e.g. 132kV, Greenfield, Zone Substation"
-                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                    className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                 </div>
 
                 {/* Scope preview */}
@@ -4017,7 +4017,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
                   Cancel
                 </button>
                 <button onClick={doSaveTemplate}
-                  className="flex-1 text-xs bg-blue-700 hover:bg-blue-600 text-white py-2 rounded font-bold">
+                  className="flex-1 text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white py-2 rounded font-bold">
                   💾 Save Template
                 </button>
               </div>
@@ -4031,11 +4031,11 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
         <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0 flex-wrap">
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search templates…"
-            className="flex-1 min-w-32 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+            className="flex-1 min-w-32 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
           <div className="flex border border-gray-200 rounded overflow-hidden">
             {categories.map(c=>(
               <button key={c} onClick={()=>setCatFilter(c)}
-                className={`text-xs px-2.5 py-1 transition-colors ${catFilter===c?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{c}</button>
+                className={`text-xs px-2.5 py-1 transition-colors ${catFilter===c?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{c}</button>
             ))}
           </div>
           <span className="text-xs text-gray-400">{filtered.length} templates</span>
@@ -4058,7 +4058,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
           {filtered.map(tmpl=>(
             <div key={tmpl.id}
               onClick={()=>{ setSelected(tmpl); setCustomName(tmpl.inv.name); setCustomNum(""); setCustomClass(tmpl.inv.estClass); setCustomType(tmpl.inv.type); }}
-              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${selected?.id===tmpl.id?"border-blue-500 shadow-md":"border-gray-200 hover:border-blue-300 hover:shadow-sm"}`}>
+              className={`bg-white rounded-lg border-2 p-4 cursor-pointer transition-all ${selected?.id===tmpl.id?"border-[var(--primary-500)] shadow-md":"border-gray-200 hover:border-[var(--primary-300)] hover:shadow-sm"}`}>
               <div className="flex items-start gap-3">
                 <span className="text-2xl flex-shrink-0">{tmpl.icon}</span>
                 <div className="flex-1 min-w-0">
@@ -4106,9 +4106,9 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
           <div className="bg-[#1e3a5f] text-white px-4 py-3 flex items-start justify-between flex-shrink-0">
             <div>
               <div className="font-bold text-sm leading-tight">{selected.name}</div>
-              <div className="text-blue-300 text-xs mt-0.5">{selected.category}{selected._custom?" · Custom template":""}</div>
+              <div className="text-[var(--primary-300)] text-xs mt-0.5">{selected.category}{selected._custom?" · Custom template":""}</div>
             </div>
-            <button onClick={()=>setSelected(null)} className="text-blue-400 hover:text-white text-sm ml-2">✕</button>
+            <button onClick={()=>setSelected(null)} className="text-[var(--primary-400)] hover:text-white text-sm ml-2">✕</button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -4118,13 +4118,13 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
                 <div>
                   <label className="text-xs text-gray-500 block mb-0.5">Investment Name</label>
                   <input value={customName} onChange={e=>setCustomName(e.target.value)}
-                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 block mb-0.5">Investment Number</label>
                   <input value={customNum} onChange={e=>setCustomNum(e.target.value)}
                     placeholder="e.g. 10012345"
-                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -4182,7 +4182,7 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
 
           <div className="border-t p-3 flex-shrink-0 space-y-2">
             <button onClick={()=>openTemplate(selected)}
-              className="w-full bg-blue-700 hover:bg-blue-600 text-white text-sm py-2.5 rounded-lg font-bold flex items-center justify-center gap-2">
+              className="w-full bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white text-sm py-2.5 rounded-lg font-bold flex items-center justify-center gap-2">
               {selected.icon} Open Template as New Estimate
             </button>
             <div className="text-[10px] text-gray-400 text-center">Opens in Estimation Tool · Save when ready to add to Portfolio</div>
@@ -4476,7 +4476,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
 
   const SortBtn = ({col,label}) => (
     <button onClick={()=>{ if(sortBy===col) setSortDir(d=>d==="asc"?"desc":"asc"); else{setSortBy(col);setSortDir("desc");} }}
-      className={`flex items-center gap-0.5 ${sortBy===col?"text-blue-600 font-bold":"text-gray-500 hover:text-gray-700"}`}>
+      className={`flex items-center gap-0.5 ${sortBy===col?"text-[var(--primary-600)] font-bold":"text-gray-500 hover:text-gray-700"}`}>
       {label}{sortBy===col&&<span className="text-xs">{sortDir==="asc"?"↑":"↓"}</span>}
     </button>
   );
@@ -4492,7 +4492,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           {id:"split",     label:"💰 Contribution Split"},
         ].map(t=>(
           <button key={t.id} onClick={()=>setHubTab(t.id)}
-            className={`text-xs px-4 py-2.5 font-semibold border-b-2 transition-colors ${hubTab===t.id?"border-blue-700 text-blue-700":"border-transparent text-gray-500 hover:text-gray-700"}`}>
+            className={`text-xs px-4 py-2.5 font-semibold border-b-2 transition-colors ${hubTab===t.id?"border-[var(--primary-700)] text-[var(--primary-700)]":"border-transparent text-gray-500 hover:text-gray-700"}`}>
             {t.label}
           </button>
         ))}
@@ -4526,7 +4526,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           <div className="flex-1"/>
           <input value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search name, number, estimator…"
-            className="border border-gray-300 rounded px-2 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+            className="border border-gray-300 rounded px-2 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
           {search && <button onClick={()=>setSearch("")} className="text-xs text-gray-400 hover:text-gray-600">✕</button>}
         </div>
 
@@ -4537,7 +4537,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             <div className="flex border border-gray-200 rounded overflow-hidden">
               {statuses.map(s=>(
                 <button key={s} onClick={()=>setStatusFilter(s)}
-                  className={`text-xs px-2.5 py-1 transition-colors ${statusFilter===s?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{s}</button>
+                  className={`text-xs px-2.5 py-1 transition-colors ${statusFilter===s?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{s}</button>
               ))}
             </div>
           </div>
@@ -4546,7 +4546,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             <div className="flex border border-gray-200 rounded overflow-hidden">
               {classes.map(c=>(
                 <button key={c} onClick={()=>setClassFilter(c)}
-                  className={`text-xs px-2 py-1 transition-colors ${classFilter===c?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{c==="All"?"All":c.replace("Class ","C")}</button>
+                  className={`text-xs px-2 py-1 transition-colors ${classFilter===c?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{c==="All"?"All":c.replace("Class ","C")}</button>
               ))}
             </div>
           </div>
@@ -4555,7 +4555,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             <div className="flex border border-gray-200 rounded overflow-hidden">
               {types.map(t=>(
                 <button key={t} onClick={()=>setTypeFilter(t)}
-                  className={`text-xs px-2.5 py-1 transition-colors ${typeFilter===t?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{t==="All"?"All":t==="Commercially Funded"?"Commercial":"Internal"}</button>
+                  className={`text-xs px-2.5 py-1 transition-colors ${typeFilter===t?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{t==="All"?"All":t==="Commercially Funded"?"Commercial":"Internal"}</button>
               ))}
             </div>
           </div>
@@ -4597,9 +4597,9 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                   return (
                     <tr key={s.id}
                       onClick={()=>setSelected(isSel?null:s)}
-                      className={`border-b cursor-pointer transition-colors ${isSel?"bg-blue-50 border-l-4 border-l-blue-500":"hover:bg-gray-50"}`}>
+                      className={`border-b cursor-pointer transition-colors ${isSel?"bg-[var(--primary-50)] border-l-4 border-l-[var(--primary-500)]":"hover:bg-gray-50"}`}>
                       <td className="px-3 py-2">
-                        <div className={`font-semibold truncate max-w-[200px] ${isSel?"text-blue-800":"text-gray-900"}`}>{s.inv.name||"Unnamed"}</div>
+                        <div className={`font-semibold truncate max-w-[200px] ${isSel?"text-[var(--primary-800)]":"text-gray-900"}`}>{s.inv.name||"Unnamed"}</div>
                         <div className="text-gray-400 font-mono">{s.inv.number} · {s.inv.type==="Commercially Funded"?"Commercial":"Internal"}</div>
                       </td>
                       <td className="px-3 py-2 text-center">
@@ -4631,13 +4631,13 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                       <td className="px-3 py-2 text-center text-gray-500 font-mono">{s.inv.revision}</td>
                       <td className="px-3 py-2 text-gray-700 whitespace-nowrap">{s.inv.estimatedBy}</td>
                       <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{s.inv.reviewedBy}</td>
-                      <td className="px-3 py-2 text-right font-bold text-blue-800">{fmt(s.totalEE)}</td>
+                      <td className="px-3 py-2 text-right font-bold text-[var(--primary-800)]">{fmt(s.totalEE)}</td>
                       <td className="px-3 py-2 text-right font-bold text-orange-700">{fmt(s.totalComm)}</td>
                       <td className="px-3 py-2 text-right text-gray-400 whitespace-nowrap">{s.savedAt}</td>
                       <td className="px-3 py-2 text-center">
                         <div className="flex gap-1 justify-center" onClick={e=>e.stopPropagation()}>
                           <button onClick={()=>onLoad(s)}
-                            className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">Open</button>
+                            className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-2 py-1 rounded font-semibold">Open</button>
                           <button onClick={(e)=>startDelete(s,e)}
                             className="text-xs border border-red-200 text-red-400 hover:bg-red-50 px-1.5 py-1 rounded" title="Delete investment (requires authorisation)">🗑</button>
                         </div>
@@ -4651,7 +4651,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                 <tfoot className="bg-gray-50 border-t-2 border-gray-300">
                   <tr>
                     <td className="px-3 py-2 font-bold text-gray-700" colSpan={6}>Portfolio Total ({filtered.length} investments)</td>
-                    <td className="px-3 py-2 text-right font-bold text-blue-900">{fmt(portTotals.ee)}</td>
+                    <td className="px-3 py-2 text-right font-bold text-[var(--primary-900)]">{fmt(portTotals.ee)}</td>
                     <td className="px-3 py-2 text-right font-bold text-orange-800">{fmt(portTotals.comm)}</td>
                     <td colSpan={2}/>
                   </tr>
@@ -4665,12 +4665,12 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       {/* RIGHT — detail panel */}
       {selected && (
         <div className="w-80 bg-white border-l flex flex-col overflow-hidden flex-shrink-0">
-          <div className="bg-blue-900 text-white px-4 py-3 flex items-start justify-between flex-shrink-0">
+          <div className="bg-[var(--primary-900)] text-white px-4 py-3 flex items-start justify-between flex-shrink-0">
             <div>
               <div className="font-bold text-sm leading-tight">{selected.inv.name}</div>
-              <div className="text-blue-300 text-xs mt-0.5">{selected.inv.number}</div>
+              <div className="text-[var(--primary-300)] text-xs mt-0.5">{selected.inv.number}</div>
             </div>
-            <button onClick={()=>setSelected(null)} className="text-blue-400 hover:text-white text-sm ml-2">✕</button>
+            <button onClick={()=>setSelected(null)} className="text-[var(--primary-400)] hover:text-white text-sm ml-2">✕</button>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -4718,7 +4718,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded text-xs font-medium">Approved</span>
                     <span className="text-gray-600 font-semibold truncate max-w-[80px]">{selected._amendmentOfName||origin?.inv?.name||"original"}</span>
                     <span className="font-mono text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">Rev {fromRev} → Rev {toRev}</span>
-                    {origin && <button onClick={()=>setSelected(origin)} className="ml-auto text-blue-600 hover:underline text-[10px]">View approved</button>}
+                    {origin && <button onClick={()=>setSelected(origin)} className="ml-auto text-[var(--primary-600)] hover:underline text-[10px]">View approved</button>}
                   </div>;
                 })()}
                 {saved.filter(s=>s.cloned_from_id===selected.id).map(child=>(
@@ -4726,7 +4726,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     <span className="text-gray-400">↳ Promoted to</span>
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${CLASS_COLOR[child.inv.estClass]||"bg-gray-100 text-gray-500"}`}>{child.inv.estClass}</span>
                     <span className="text-gray-600 font-semibold truncate max-w-[100px]">{child.inv.name}</span>
-                    <button onClick={()=>setSelected(child)} className="ml-auto text-blue-600 hover:underline text-[10px]">View</button>
+                    <button onClick={()=>setSelected(child)} className="ml-auto text-[var(--primary-600)] hover:underline text-[10px]">View</button>
                   </div>
                 ))}
                 {saved.filter(s=>s._amendmentOf===selected.id).map(amend=>(
@@ -4735,7 +4735,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${STATUS_CFG[amend.status||"Draft"]?.bg} ${STATUS_CFG[amend.status||"Draft"]?.text}`}>{amend.status||"Draft"}</span>
                     <span className="font-mono text-[10px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded">Rev {amend._amendmentOfRevision||selected.inv?.revision||"A"} → Rev {amend.inv?.revision||"B"}</span>
                     <span className="text-gray-600 font-semibold truncate max-w-[80px]">{amend.inv.name}</span>
-                    <button onClick={()=>setSelected(amend)} className="ml-auto text-blue-600 hover:underline text-[10px]">View</button>
+                    <button onClick={()=>setSelected(amend)} className="ml-auto text-[var(--primary-600)] hover:underline text-[10px]">View</button>
                   </div>
                 ))}
               </div>
@@ -4746,7 +4746,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               <div className="text-xs font-bold text-gray-600 uppercase tracking-wide">Financials</div>
               <div className="flex justify-between">
                 <span className="text-xs text-gray-500">EE Internal</span>
-                <span className="text-xs font-bold text-blue-800">{fmt(selected.totalEE)}</span>
+                <span className="text-xs font-bold text-[var(--primary-800)]">{fmt(selected.totalEE)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-xs text-gray-500">Commercial Total</span>
@@ -4768,10 +4768,10 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                   <div key={ph} className="flex items-center gap-2 mb-1">
                     <span className="text-xs text-gray-400 w-20 flex-shrink-0">Phase {ph}</span>
                     <div className="flex-1 bg-gray-100 rounded h-1.5">
-                      <div className="h-1.5 rounded bg-blue-500"
+                      <div className="h-1.5 rounded bg-[var(--primary-500)]"
                         style={{width:`${selected.totalEE>0?Math.round(p.eeInt/selected.totalEE*100):0}%`}}/>
                     </div>
-                    <span className="text-xs font-medium text-blue-800 w-20 text-right">{fmt(p.eeInt)}</span>
+                    <span className="text-xs font-medium text-[var(--primary-800)] w-20 text-right">{fmt(p.eeInt)}</span>
                   </div>
                 ))}
               </div>
@@ -4781,7 +4781,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           {/* Actions */}
           <div className="border-t p-3 space-y-2 flex-shrink-0">
             <button onClick={()=>onLoad(selected)}
-              className="w-full bg-blue-700 hover:bg-blue-600 text-white text-xs py-2 rounded font-semibold">
+              className="w-full bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white text-xs py-2 rounded font-semibold">
               📐 Open in Estimation Tool
             </button>
             <button onClick={()=>{setCloneSource(selected);const idx=CLASS_ORDER.indexOf(selected.inv.estClass);setCloneClass(idx>0?CLASS_ORDER[idx-1]:"Class 4");setShowCloneModal(true);}}
@@ -4790,7 +4790,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             </button>
             <div className="flex gap-2">
               <button onClick={()=>exportPDF(selected)}
-                className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-blue-400">📄 Export PDF</button>
+                className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-[var(--primary-400)]">📄 Export PDF</button>
               <button className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50">☁️ Copperleaf</button>
               <button onClick={(e)=>startDelete(selected,e)}
                 className="border border-red-200 text-red-500 text-xs px-2 py-1.5 rounded hover:bg-red-50 flex items-center gap-1" title="Delete investment">🗑 Delete</button>
@@ -4969,7 +4969,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
               </div>
             </div>
 
-            <div className="text-xs text-gray-400 bg-blue-50 border border-blue-100 rounded p-2 mb-4">
+            <div className="text-xs text-gray-400 bg-[var(--primary-50)] border border-[var(--primary-100)] rounded p-2 mb-4">
               💡 All estimate lines, quantities, factors and costs are copied exactly. The clone is linked back to this source — the lineage chain is visible in the detail panel.
             </div>
 
@@ -5006,7 +5006,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     onChange={e=>{ setImportText(e.target.value); if(e.target.value.trim()) parseImport(e.target.value); else { setImportError(""); setImportPreview(null); }}}
                     placeholder='{ "inv": { "name": "My Investment", "number": "10012345", ... }, "lines": { ... } }' 
                     rows={10}
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"/>
+                    className="w-full border border-gray-300 rounded px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] resize-none"/>
                 </div>
                 {importError && (
                   <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mb-3">⚠ {importError}</div>
@@ -5018,7 +5018,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                   <button onClick={()=>{setShowImport(false);setImportText("");setImportError("");}}
                     className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50">Cancel</button>
                   <button onClick={()=>parseImport(importText)} disabled={!importText.trim()}
-                    className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:bg-gray-300 text-white text-sm py-2 rounded-lg font-bold">
+                    className="flex-1 bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:bg-gray-300 text-white text-sm py-2 rounded-lg font-bold">
                     Validate JSON →
                   </button>
                 </div>
@@ -5375,7 +5375,7 @@ ${invRows}
       <div className="w-60 flex-shrink-0 border-r bg-white flex flex-col overflow-hidden">
         <div className="px-3 py-2.5 border-b flex items-center justify-between">
           <span className="text-xs font-bold text-gray-700">Programmes</span>
-          <button onClick={()=>setShowNewProg(true)} className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded font-semibold">+ New</button>
+          <button onClick={()=>setShowNewProg(true)} className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-2 py-1 rounded font-semibold">+ New</button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {programmes.length===0&&(
@@ -5385,8 +5385,8 @@ ${invRows}
             const s=getProgSummary(p); const isSel=selectedProg===p.id;
             return (
               <div key={p.id} onClick={()=>{setSelectedProg(isSel?null:p.id);setExpandedChild(null);}}
-                className={`px-3 py-2.5 border-b cursor-pointer transition-colors ${isSel?"bg-blue-50 border-l-4 border-l-blue-700":"hover:bg-gray-50"}`}>
-                <div className={`font-semibold text-xs truncate ${isSel?"text-blue-800":"text-gray-800"}`}>{p.name}</div>
+                className={`px-3 py-2.5 border-b cursor-pointer transition-colors ${isSel?"bg-[var(--primary-50)] border-l-4 border-l-[var(--primary-700)]":"hover:bg-gray-50"}`}>
+                <div className={`font-semibold text-xs truncate ${isSel?"text-[var(--primary-800)]":"text-gray-800"}`}>{p.name}</div>
                 {p.number&&<div className="text-xs text-gray-400 font-mono">{p.number}</div>}
                 <div className="text-xs text-gray-400 mt-0.5">{s.children.length} investments</div>
                 <div className="flex gap-3 mt-1">
@@ -5422,7 +5422,7 @@ ${invRows}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={generateReport} disabled={!summary.children.length}
-                      className="text-xs bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 shadow">
+                      className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:opacity-40 text-white px-3 py-1.5 rounded font-semibold flex items-center gap-1.5 shadow">
                       🖨️ Produce Report
                     </button>
                     <button onClick={()=>deleteProg(prog.id)} className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2 py-1 rounded">Delete</button>
@@ -5464,7 +5464,7 @@ ${invRows}
                 <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
                   <span className="text-xs font-bold text-gray-700">Child Investments — click to set attribution</span>
                   <button onClick={()=>setShowAddInv(true)}
-                    className="text-xs bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded font-semibold">+ Add investment</button>
+                    className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-3 py-1 rounded font-semibold">+ Add investment</button>
                 </div>
 
                 {summary.children.length===0?(
@@ -5477,10 +5477,10 @@ ${invRows}
                       const tagGroups=isExp&&(c.splitMethod==="section"||c.splitMethod==="item")?buildTagGroups(c):[];
 
                       return (
-                        <div key={c.invId} className={`border-b last:border-0 ${isExp?"border-l-4 border-l-blue-500":""}`}>
+                        <div key={c.invId} className={`border-b last:border-0 ${isExp?"border-l-4 border-l-[var(--primary-500)]":""}`}>
                           {/* Row header — click to expand */}
                           <div
-                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isExp?"bg-blue-50":"hover:bg-gray-50"}`}
+                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isExp?"bg-[var(--primary-50)]":"hover:bg-gray-50"}`}
                             onClick={()=>setExpandedChild(isExp?null:String(c.invId))}>
                             <span className="text-xs text-gray-400">{isExp?"▾":"▸"}</span>
                             <div className="flex-1 min-w-0">
@@ -5509,7 +5509,7 @@ ${invRows}
 
                           {/* Expanded: per-child split controls */}
                           {isExp&&(
-                            <div className="bg-white border-t border-blue-100 px-4 py-4 space-y-4">
+                            <div className="bg-white border-t border-[var(--primary-100)] px-4 py-4 space-y-4">
 
                               {/* Role + method selectors */}
                               <div className="grid grid-cols-2 gap-4">
@@ -5518,7 +5518,7 @@ ${invRows}
                                   <div className="flex border border-gray-200 rounded overflow-hidden">
                                     {["EE-funded","Customer-funded","Shared"].map(r=>(
                                       <button key={r} onClick={()=>updateChild(c.invId,{role:r})}
-                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${c.role===r?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{r}</button>
+                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${c.role===r?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{r}</button>
                                     ))}
                                   </div>
                                 </div>
@@ -5527,7 +5527,7 @@ ${invRows}
                                   <div className="flex border border-gray-200 rounded overflow-hidden">
                                     {["percentage","capped","section","item"].map(m=>(
                                       <button key={m} onClick={()=>updateChild(c.invId,{splitMethod:m})}
-                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${(c.splitMethod||"percentage")===m?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>
+                                        className={`flex-1 text-xs py-1.5 font-semibold transition-colors ${(c.splitMethod||"percentage")===m?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>
                                         {METHOD_LABELS[m]}
                                       </button>
                                     ))}
@@ -5561,7 +5561,7 @@ ${invRows}
                                     <span className="text-xs text-gray-500">Cap ($)</span>
                                     <input type="number" value={c.eeCap||7000000} step="100000"
                                       onChange={e=>updateChild(c.invId,{eeCap:parseFloat(e.target.value)})}
-                                      className="border border-gray-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                                      className="border border-gray-300 rounded px-2 py-1 text-xs w-40 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                                     <span className="text-xs text-gray-400">Default $7M — RIT-D required to increase</span>
                                   </div>
                                   {c.split.ritD&&<div className="mt-2 text-xs bg-red-50 border border-red-200 rounded px-3 py-1.5 text-red-700">⚠️ Cap exceeded by {fmt(c.split.overCap)}. RIT-D required.</div>}
@@ -5591,7 +5591,7 @@ ${invRows}
                                               <span className="text-xs font-mono font-semibold text-gray-700">{gk}</span>
                                               <span className="text-xs text-gray-400 flex-1">{group.items.length} {c.splitMethod==="section"?"sections":"items"}</span>
                                               <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateChildTagging(c.invId,t.key,"EE"));}}
-                                                className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded">All EE</button>
+                                                className="text-xs bg-[var(--primary-50)] hover:bg-[var(--primary-100)] text-[var(--primary-700)] border border-[var(--primary-200)] px-2 py-0.5 rounded">All EE</button>
                                               <button onClick={e=>{e.stopPropagation();group.items.forEach(t=>updateChildTagging(c.invId,t.key,"Customer"));}}
                                                 className="text-xs bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 px-2 py-0.5 rounded">All Cust</button>
                                               <span className="text-xs text-gray-400">
@@ -5603,15 +5603,15 @@ ${invRows}
                                             {isOpen&&group.items.map(t=>{
                                               const tag=tagging[t.key];
                                               return (
-                                                <div key={t.key} className={`flex items-center gap-2 px-5 py-1.5 border-t border-gray-100 ${tag==="EE"?"bg-blue-50":tag==="Customer"?"bg-orange-50":""}`}>
-                                                  <span className="text-xs font-mono text-blue-700 min-w-36">{t.key}</span>
+                                                <div key={t.key} className={`flex items-center gap-2 px-5 py-1.5 border-t border-gray-100 ${tag==="EE"?"bg-[var(--primary-50)]":tag==="Customer"?"bg-orange-50":""}`}>
+                                                  <span className="text-xs font-mono text-[var(--primary-700)] min-w-36">{t.key}</span>
                                                   <span className="text-xs text-gray-600 flex-1 truncate">{t.label}</span>
                                                   <div className="flex border border-gray-200 rounded overflow-hidden">
                                                     {["EE","Customer",""].map((v,vi)=>(
                                                       <button key={vi}
                                                         onClick={()=>updateChildTagging(c.invId,t.key,v||undefined)}
                                                         className={`text-xs px-2.5 py-1 transition-colors ${tag===(v||undefined)
-                                                          ?v==="EE"?"bg-blue-700 text-white":v==="Customer"?"bg-orange-600 text-white":"bg-gray-300 text-gray-700"
+                                                          ?v==="EE"?"bg-[var(--primary-700)] text-white":v==="Customer"?"bg-orange-600 text-white":"bg-gray-300 text-gray-700"
                                                           :"text-gray-500 hover:bg-gray-50"}`}>
                                                         {v||"—"}
                                                       </button>
@@ -5665,18 +5665,18 @@ ${invRows}
                 <label className="text-xs text-gray-500 font-semibold block mb-1">Programme name *</label>
                 <input autoFocus value={newProgName} onChange={e=>setNewProgName(e.target.value)}
                   placeholder="e.g. Marulan Augmentation Programme"
-                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
               </div>
               <div>
                 <label className="text-xs text-gray-500 font-semibold block mb-1">Programme number (optional)</label>
                 <input value={newProgNum} onChange={e=>setNewProgNum(e.target.value)} placeholder="e.g. PROG-2026-001"
-                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
               </div>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={()=>setShowNewProg(false)} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={createProg} disabled={!newProgName.trim()}
-                className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Create Programme</button>
+                className="flex-1 bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Create Programme</button>
             </div>
           </div>
         </div>
@@ -5691,7 +5691,7 @@ ${invRows}
               <div>
                 <label className="text-xs text-gray-500 font-semibold block mb-1">Select saved investment</label>
                 <select value={addInvId} onChange={e=>setAddInvId(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+                  className="w-full border border-gray-300 rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] bg-white">
                   <option value="">— choose investment —</option>
                   {availableInvs.map(s=>(
                     <option key={s.id} value={s.id}>{s.inv?.name||"Unnamed"} ({s.inv?.number||"no number"}) · {s.inv?.type==="Commercially Funded"?"Commercial":"Internal"}</option>
@@ -5703,7 +5703,7 @@ ${invRows}
                 <div className="flex gap-2">
                   {["EE-funded","Customer-funded","Shared"].map(r=>(
                     <button key={r} onClick={()=>setAddInvRole(r)}
-                      className={`flex-1 text-xs py-2 rounded border font-semibold transition-colors ${addInvRole===r?"border-blue-700 bg-blue-700 text-white":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>{r}</button>
+                      className={`flex-1 text-xs py-2 rounded border font-semibold transition-colors ${addInvRole===r?"border-[var(--primary-700)] bg-[var(--primary-700)] text-white":"border-gray-300 text-gray-600 hover:bg-gray-50"}`}>{r}</button>
                   ))}
                 </div>
               </div>
@@ -5726,7 +5726,7 @@ ${invRows}
             <div className="flex gap-2 mt-5">
               <button onClick={()=>{setShowAddInv(false);setAddInvId("");}} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
               <button onClick={addChildInv} disabled={!addInvId}
-                className="flex-1 bg-blue-700 hover:bg-blue-600 disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Add to Programme</button>
+                className="flex-1 bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:opacity-40 text-white rounded px-3 py-1.5 text-xs font-semibold">Add to Programme</button>
             </div>
           </div>
         </div>
@@ -5746,8 +5746,8 @@ const WBS_PROFILES = [
   {id:"COMMS_STANDARD",name:"Communications",section:"Comms",status:"Draft",tiers:[{f:1,t:2,s:1.00},{f:3,t:6,s:0.90},{f:7,t:null,s:0.85}]},
 ];
 const WBS_ST={Approved:"bg-green-100 text-green-700",Pending:"bg-yellow-100 text-yellow-700",Draft:"bg-gray-100 text-gray-500"};
-const WBS_FC=f=>f>=1?"text-green-600":f>=0.90?"text-blue-600":f>=0.85?"text-yellow-600":f>=0.80?"text-orange-600":"text-red-600";
-const WBS_ROLE_STYLES={"Lead Estimator":"bg-blue-100 text-blue-700","Senior Estimator":"bg-purple-100 text-purple-700","Estimator":"bg-gray-100 text-gray-600","Project Manager":"bg-green-100 text-green-700"};
+const WBS_FC=f=>f>=1?"text-green-600":f>=0.90?"text-[var(--primary-600)]":f>=0.85?"text-yellow-600":f>=0.80?"text-orange-600":"text-red-600";
+const WBS_ROLE_STYLES={"Lead Estimator":"bg-[var(--primary-100)] text-[var(--primary-700)]","Senior Estimator":"bg-purple-100 text-purple-700","Estimator":"bg-gray-100 text-gray-600","Project Manager":"bg-green-100 text-green-700"};
 const SAMPLE_PEOPLE=[
   {id:1,name:"Daniel Lawrence",email:"d.lawrence@essentialenergy.com.au",role:"Lead Estimator",team:"Zone Substation",canReview:true,active:true},
   {id:2,name:"Steven Hannigan",email:"s.hannigan@essentialenergy.com.au",role:"Lead Estimator",team:"Zone Substation",canReview:true,active:true},
@@ -5797,8 +5797,8 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
     {key:"ee_commercial_rate",  label:"EE Commercial",  type:"number", cls:"text-right w-20 border-orange-300 bg-orange-50"},
     {key:"contractor_rate",     label:"Contr. Rate",    type:"number", cls:"text-right w-20 border-teal-300 bg-teal-50"},
     {key:"ans_margin_pct",      label:"ANS %",          type:"number", cls:"text-right w-14 border-purple-300"},
-    {key:"aer_code",            label:"AER Code",       type:"text",   cls:"w-16 border-blue-300 font-mono"},
-    {key:"erp_code",            label:"ERP Code",       type:"text",   cls:"w-16 border-blue-200"},
+    {key:"aer_code",            label:"AER Code",       type:"text",   cls:"w-16 border-[var(--primary-300)] font-mono"},
+    {key:"erp_code",            label:"ERP Code",       type:"text",   cls:"w-16 border-[var(--primary-200)]"},
     {key:"wacs_craft",          label:"WACS Craft",     type:"text",   cls:"w-24 border-indigo-300 font-mono"},
     {key:"resource_code",       label:"CL Code",        type:"text",   cls:"w-24 border-teal-300 font-mono"},
     {key:"currency_type",       label:"Unit",           type:"text",   cls:"w-14 border-gray-300"},
@@ -5840,7 +5840,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
       <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
           placeholder="Search name, CL code, WACS, AER…"
-          className="border border-gray-300 rounded px-2 py-1 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-[var(--primary-300)]"/>
         {searchQ && <button onClick={()=>setSearchQ("")} className="text-gray-400 text-xs hover:text-gray-600">✕</button>}
         <select value={filterUnit} onChange={e=>setFilterUnit(e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none">
@@ -5869,7 +5869,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
               <th className="text-right px-2 py-2 font-semibold text-orange-700 whitespace-nowrap">EE Commercial</th>
               <th className="text-right px-2 py-2 font-semibold text-teal-700 whitespace-nowrap">Contr. Rate</th>
               <th className="text-right px-2 py-2 font-semibold text-purple-700 whitespace-nowrap">ANS %</th>
-              <th className="text-center px-2 py-2 font-semibold text-blue-700 whitespace-nowrap">AER Code</th>
+              <th className="text-center px-2 py-2 font-semibold text-[var(--primary-700)] whitespace-nowrap">AER Code</th>
               <th className="text-center px-2 py-2 font-semibold text-gray-500 whitespace-nowrap">ERP Code</th>
               <th className="text-center px-2 py-2 font-semibold text-indigo-700 whitespace-nowrap">WACS Craft</th>
               <th className="text-center px-2 py-2 font-semibold text-teal-800 whitespace-nowrap">CL Code</th>
@@ -5884,7 +5884,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
               const isEd = editingKey === r.resource_name;
               const isDollar = (r.currency_type||"Hour") === "Dollar";
               const isDay    = (r.currency_type||"Hour") === "Day";
-              const rowBg = isEd ? "bg-blue-50" : isDollar ? "bg-amber-50/40" : isDay ? "bg-orange-50/40" : "hover:bg-gray-50";
+              const rowBg = isEd ? "bg-[var(--primary-50)]" : isDollar ? "bg-amber-50/40" : isDay ? "bg-orange-50/40" : "hover:bg-gray-50";
               const ef = v => isEd
                 ? <input type="number" step="0.01" value={editVals[v]||""} onChange={e=>setEditVals(p=>({...p,[v]:e.target.value}))}
                     className="w-20 border border-green-300 bg-green-50 rounded px-1 py-0.5 text-xs text-right focus:outline-none"/>
@@ -5905,7 +5905,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
                           className="border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none">
                           <option>Hour</option><option>Dollar</option><option>Day</option>
                         </select>
-                      : <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isDollar?"bg-amber-100 text-amber-800":isDay?"bg-orange-100 text-orange-800":"bg-blue-100 text-blue-800"}`}>{r.currency_type||"Hour"}</span>
+                      : <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${isDollar?"bg-amber-100 text-amber-800":isDay?"bg-orange-100 text-orange-800":"bg-[var(--primary-100)] text-[var(--primary-800)]"}`}>{r.currency_type||"Hour"}</span>
                     }
                   </td>
                   {/* EE Internal */}
@@ -5944,8 +5944,8 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
                   <td className="px-2 py-1.5 text-center">
                     {isEd
                       ? <input type="text" value={editVals.aer_code||""} onChange={e=>setEditVals(p=>({...p,aer_code:e.target.value}))}
-                          className="w-16 border border-blue-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
-                      : <span className="font-mono text-blue-700">{r.aer_code||"—"}</span>
+                          className="w-16 border border-[var(--primary-300)] rounded px-1 py-0.5 text-xs font-mono focus:outline-none"/>
+                      : <span className="font-mono text-[var(--primary-700)]">{r.aer_code||"—"}</span>
                     }
                   </td>
                   {/* ERP Code */}
@@ -6003,7 +6003,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
                           <button onClick={()=>saveEdit(r.resource_name)} className="text-green-600 hover:text-green-800 font-bold text-xs bg-green-50 border border-green-300 rounded px-2 py-0.5">✓ Save</button>
                           <button onClick={()=>setEditingKey(null)} className="text-gray-400 hover:text-gray-600 text-xs border border-gray-200 rounded px-1.5 py-0.5">✕</button>
                         </div>
-                      : <button onClick={()=>startEdit(r)} className="text-blue-400 hover:text-blue-700 text-xs border border-blue-200 hover:border-blue-400 rounded px-2 py-0.5">Edit</button>
+                      : <button onClick={()=>startEdit(r)} className="text-[var(--primary-400)] hover:text-[var(--primary-700)] text-xs border border-[var(--primary-200)] hover:border-[var(--primary-400)] rounded px-2 py-0.5">Edit</button>
                     )}
                   </td>
                 </tr>
@@ -6015,7 +6015,7 @@ function RatesEditor({ rates, managerMode, onUnlock }) {
 
       {/* Footer legend */}
       <div className="flex-shrink-0 border-t bg-gray-50 px-3 py-1.5 flex items-center gap-4 text-[10px] text-gray-500">
-        <span className="flex items-center gap-1"><span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold">Hour</span> Labour resource</span>
+        <span className="flex items-center gap-1"><span className="bg-[var(--primary-100)] text-[var(--primary-800)] px-1 rounded font-semibold">Hour</span> Labour resource</span>
         <span className="flex items-center gap-1"><span className="bg-amber-100 text-amber-800 px-1 rounded font-semibold">Dollar</span> Contractor / Materials</span>
         <span className="flex items-center gap-1"><span className="bg-orange-100 text-orange-800 px-1 rounded font-semibold">Day</span> WAFHA / Accommodation</span>
         <span className="ml-2">CL Code = Copperleaf Resource Code · WACS = ERP craft code · Account: Internal=001001 · External/Commercial=001000</span>
@@ -6034,7 +6034,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
 
   const PROFILE_STATUS = ["Confirmed","Pending","Draft"];
   const SC = {Confirmed:"bg-green-100 text-green-700", Pending:"bg-yellow-100 text-yellow-700", Draft:"bg-gray-100 text-gray-500"};
-  const FC = f => f>=1?"text-green-600":f>=0.90?"text-blue-600":f>=0.85?"text-yellow-600":f>=0.80?"text-orange-600":"text-red-600";
+  const FC = f => f>=1?"text-green-600":f>=0.90?"text-[var(--primary-600)]":f>=0.85?"text-yellow-600":f>=0.80?"text-orange-600":"text-red-600";
 
   const updateTier = (profileId, tierIdx, field, val) => {
     const base = localProfiles || ctxProfiles;
@@ -6120,7 +6120,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
         <div className="flex border border-gray-200 rounded overflow-hidden">
           {[{id:"tiers",label:"📊 Scale Profiles & Tiers"},{id:"assign",label:"🔗 WBS Assignment"}].map(t=>(
             <button key={t.id} onClick={()=>setScaleTab(t.id)}
-              className={`text-xs px-3 py-1.5 font-semibold transition-colors ${scaleTab===t.id?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{t.label}</button>
+              className={`text-xs px-3 py-1.5 font-semibold transition-colors ${scaleTab===t.id?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{t.label}</button>
           ))}
         </div>
         <span className="text-xs text-gray-500">{Object.keys(profiles).length} profiles · {allWbsRows.length} WBS items</span>
@@ -6142,7 +6142,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
             <div className="flex items-center gap-2 mb-3">
               <input value={wbsSearch} onChange={e=>setWbsSearch(e.target.value)}
                 placeholder="Search WBS code or description…"
-                className="border border-gray-300 rounded px-2 py-1.5 text-xs flex-1 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                className="border border-gray-300 rounded px-2 py-1.5 text-xs flex-1 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
               <select value={wbsScopeFilter} onChange={e=>setWbsScopeFilter(e.target.value)}
                 className="text-xs border border-gray-300 rounded px-2 py-1.5 focus:outline-none">
                 {["All","Commission"].map(s=><option key={s}>{s}</option>)}
@@ -6177,10 +6177,10 @@ function ScalingEditor({ managerMode, onUnlock }) {
                     const hasOverride = ovrd !== undefined;
                     return (
                       <tr key={r.wbs_code} className={`border-b ${i%2===0?"":"bg-gray-50/50"} ${hasOverride?"border-l-2 border-l-amber-400":""}`}>
-                        <td className="px-3 py-2 font-mono text-blue-700">{r.wbs_code}</td>
+                        <td className="px-3 py-2 font-mono text-[var(--primary-700)]">{r.wbs_code}</td>
                         <td className="px-3 py-2 text-gray-700 max-w-[240px] truncate">{r.description}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded text-xs font-medium">{r.scope}</span>
+                          <span className="bg-[var(--primary-100)] text-[var(--primary-700)] px-1.5 py-0.5 rounded text-xs font-medium">{r.scope}</span>
                         </td>
                         <td className="px-3 py-2">
                           {r.default_profile ? (
@@ -6204,7 +6204,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
                                   setWbsOverride(r.wbs_code, v);
                                 }
                               }}
-                              className="text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white">
+                              className="text-xs border border-gray-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] bg-white">
                               <option value="__default__">— use default —</option>
                               <option value="none">None (no scaling)</option>
                               {Object.entries(profiles).map(([pid,p])=>(
@@ -6264,7 +6264,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
                   <span className="text-xs text-gray-400 font-mono">{profileId}</span>
                   {managerMode ? (
                     <select value={profile.status||"Pending"} onChange={e=>updateStatus(profileId,e.target.value)}
-                      className={`text-xs px-2 py-0.5 rounded font-medium border-0 focus:outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer ${SC[profile.status]||SC.Draft}`}>
+                      className={`text-xs px-2 py-0.5 rounded font-medium border-0 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] cursor-pointer ${SC[profile.status]||SC.Draft}`}>
                       {PROFILE_STATUS.map(s=><option key={s}>{s}</option>)}
                     </select>
                   ) : (
@@ -6280,7 +6280,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
               <div className="p-4">
                 <div className="flex items-center gap-1 flex-wrap">
                   {profile.tiers.map((tier,i)=>(
-                    <div key={i} className={`relative border rounded-lg p-3 text-center min-w-[90px] ${managerMode?"border-blue-200 bg-blue-50":"border-gray-200 bg-gray-50"}`}>
+                    <div key={i} className={`relative border rounded-lg p-3 text-center min-w-[90px] ${managerMode?"border-[var(--primary-200)] bg-[var(--primary-50)]":"border-gray-200 bg-gray-50"}`}>
                       {managerMode && (
                         <button onClick={()=>removeTier(profileId,i)}
                           className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none hover:bg-red-700">×</button>
@@ -6290,11 +6290,11 @@ function ScalingEditor({ managerMode, onUnlock }) {
                         {managerMode ? (
                           <>
                             <input type="number" min="1" value={tier.qty_from} onChange={e=>updateTier(profileId,i,'qty_from',parseFloat(e.target.value))}
-                              className="w-10 text-center border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                              className="w-10 text-center border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                             <span className="text-gray-400 text-xs">–</span>
                             <input type="number" min="1" value={tier.qty_to??""} onChange={e=>updateTier(profileId,i,'qty_to',e.target.value?parseFloat(e.target.value):null)}
                               placeholder="∞"
-                              className="w-10 text-center border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                              className="w-10 text-center border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                           </>
                         ) : (
                           <span className="text-xs font-medium text-gray-600">{tier.qty_from}{tier.qty_to?`–${tier.qty_to}`:"+∞"}</span>
@@ -6305,7 +6305,7 @@ function ScalingEditor({ managerMode, onUnlock }) {
                         <input type="number" min="1" max="100" step="1"
                           value={Math.round(tier.scale*100)}
                           onChange={e=>updateTier(profileId,i,'scale',parseFloat(e.target.value)/100)}
-                          className="w-16 text-center border border-gray-300 rounded px-1 py-1 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                          className="w-16 text-center border border-gray-300 rounded px-1 py-1 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                       ) : (
                         <div className={`text-lg font-bold ${FC(tier.scale)}`}>{(tier.scale*100).toFixed(0)}%</div>
                       )}
@@ -6386,7 +6386,7 @@ function EscalationEditor({ managerMode, onUnlock }) {
 
           {/* Rate table */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-blue-900 text-white px-4 py-2.5">
+            <div className="bg-[var(--primary-900)] text-white px-4 py-2.5">
               <div className="font-bold text-sm">Annual Escalation Rates by Category</div>
               <div className="text-xs opacity-75 mt-0.5">Applied by fiscal year (Australian FY: July – June)</div>
             </div>
@@ -6414,7 +6414,7 @@ function EscalationEditor({ managerMode, onUnlock }) {
                                 type="number" min="0" max="20" step="0.1"
                                 value={r.rates[fy]}
                                 onChange={e=>updateRate(cat, fy, e.target.value)}
-                                className="w-16 text-center border border-blue-300 bg-blue-50 rounded px-1.5 py-1 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                className="w-16 text-center border border-[var(--primary-300)] bg-[var(--primary-50)] rounded px-1.5 py-1 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"
                               />
                               <span className="text-gray-500 text-xs">%</span>
                             </div>
@@ -6456,7 +6456,7 @@ function EscalationEditor({ managerMode, onUnlock }) {
                       <td className="px-4 py-3 font-semibold text-gray-700">{rates[cat].label}</td>
                       {["Planning","Design","Construction/Comm"].map(ph=>(
                         <td key={ph} className="px-4 py-3 text-center">
-                          <span className="font-bold text-blue-800">{factors[ph]}%</span>
+                          <span className="font-bold text-[var(--primary-800)]">{factors[ph]}%</span>
                         </td>
                       ))}
                     </tr>
@@ -6471,7 +6471,7 @@ function EscalationEditor({ managerMode, onUnlock }) {
           </div>
 
           {/* Formula explanation */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-800">
+          <div className="bg-[var(--primary-50)] border border-[var(--primary-200)] rounded-lg p-4 text-xs text-[var(--primary-800)]">
             <div className="font-bold mb-2">How escalation is calculated</div>
             <div className="space-y-1">
               <div>1. Each phase cost is split into Labour (EE), Contractors, and Materials.</div>
@@ -6637,8 +6637,8 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
   const SCOPE_OPTIONS    = ["Supply","Install","Commission","Supply & Install","Supply, Install & Commission","Demolition / Removal","Administration","Other"];
   const UOM_OPTIONS      = ["each","m","m2","m3","kg","km","day","lot","set","hr"];
 
-  const INP = "w-full border rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white";
-  const SEL = "w-full border rounded px-1 py-0.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400";
+  const INP = "w-full border rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] bg-white";
+  const SEL = "w-full border rounded px-1 py-0.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -6647,7 +6647,7 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
       <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="Search code, description, resource…"
-          className="border border-gray-200 rounded px-2 py-1.5 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+          className="border border-gray-200 rounded px-2 py-1.5 text-xs w-52 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
         <select value={phaseFilter} onChange={e=>setPhaseFilter(e.target.value)}
           className="text-xs border border-gray-200 rounded px-2 py-1.5 bg-white focus:outline-none">
           {["All","1","2","3","4","5"].map(p=>(
@@ -6743,13 +6743,13 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
                   (s.ee_labour_rate  > 0) || (s.pce_price   > 0) || (s.plant_cost > 0)
                 );
                 const isEd   = editing === s.wbs_code;
-                const rowBg  = isEd    ? "bg-blue-50"
+                const rowBg  = isEd    ? "bg-[var(--primary-50)]"
                              : hasGap  ? (i%2===0?"bg-amber-50":"bg-amber-50/60")
                              : i%2===0 ? "bg-white" : "bg-gray-50";
 
                 if (isEd) return (
-                  <tr key={s.wbs_code} className="bg-blue-50 border-y-2 border-blue-400">
-                    <td className="px-2 py-1.5 font-mono text-blue-800 whitespace-nowrap text-[10px]">{s.wbs_code}</td>
+                  <tr key={s.wbs_code} className="bg-[var(--primary-50)] border-y-2 border-[var(--primary-400)]">
+                    <td className="px-2 py-1.5 font-mono text-[var(--primary-800)] whitespace-nowrap text-[10px]">{s.wbs_code}</td>
                     <td className="px-1 py-1"><input value={editVals.description} onChange={e=>setEditVals(p=>({...p,description:e.target.value}))} className={INP}/></td>
                     <td className="px-1 py-1"><select value={editVals.scope} onChange={e=>setEditVals(p=>({...p,scope:e.target.value}))} className={SEL}>{SCOPE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></td>
                     <td className="px-1 py-1"><select value={editVals.delivery_method} onChange={e=>setEditVals(p=>({...p,delivery_method:e.target.value}))} className={SEL}>{DELIVERY_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></td>
@@ -6764,7 +6764,7 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
                     <td className="px-1 py-1"><input value={editVals.commission_wbs} onChange={e=>setEditVals(p=>({...p,commission_wbs:e.target.value}))} className={`${INP} font-mono text-[10px]`} placeholder="e.g. 4.1.x.xx.x.xx"/></td>
                     <td className="px-1 py-1 text-center">
                       <div className="flex flex-col gap-1">
-                        <button onClick={()=>saveEdit(s.wbs_code)} className="bg-blue-700 hover:bg-blue-600 text-white px-2 py-0.5 rounded text-[10px] font-semibold">Save</button>
+                        <button onClick={()=>saveEdit(s.wbs_code)} className="bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-2 py-0.5 rounded text-[10px] font-semibold">Save</button>
                         <button onClick={()=>setEditing(null)} className="border border-gray-300 text-gray-500 hover:bg-gray-50 px-2 py-0.5 rounded text-[10px]">Cancel</button>
                       </div>
                     </td>
@@ -6775,7 +6775,7 @@ function WBSItemEditor({ wbs, supply, rates, managerMode, onUnlock, loading }) {
                 return (
                   <tr key={s.wbs_code}
                     onClick={()=>startEdit(s)}
-                    className={`${rowBg} ${managerMode?"cursor-pointer hover:bg-blue-50/50":""} transition-colors`}>
+                    className={`${rowBg} ${managerMode?"cursor-pointer hover:bg-[var(--primary-50)]/50":""} transition-colors`}>
                     <td className="px-2 py-1.5 font-mono text-gray-600 whitespace-nowrap text-[10px]">{s.wbs_code}</td>
                     <td className="px-2 py-1.5 text-gray-800 max-w-xs" title={s.description}>
                       <div className="truncate">{s.description}</div>
@@ -6952,7 +6952,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
       {/* Header toolbar */}
       <div className="bg-white border-b px-4 py-2.5 flex items-center gap-3 flex-shrink-0">
         <button onClick={runTest}
-          className="text-xs px-3 py-1.5 bg-blue-700 hover:bg-blue-600 text-white rounded font-semibold flex items-center gap-1.5">
+          className="text-xs px-3 py-1.5 bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white rounded font-semibold flex items-center gap-1.5">
           🔍 Run checks
         </button>
         {lastRun && <span className="text-xs text-gray-400">Last run: {lastRun.toLocaleTimeString("en-AU")}</span>}
@@ -6968,7 +6968,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
           {sections.map(s=>(
             <button key={s.id} onClick={()=>setActiveSection(s.id)}
               className={`text-left px-4 py-2.5 text-xs flex items-center justify-between gap-2 border-l-2 transition-colors
-                ${activeSection===s.id?"border-blue-600 bg-blue-50 text-blue-800 font-semibold":"border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-800"}`}>
+                ${activeSection===s.id?"border-[var(--primary-600)] bg-[var(--primary-50)] text-[var(--primary-800)] font-semibold":"border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-800"}`}>
               <span>{s.label}</span>
               <Pill n={s.count} approved={s.approved} type={s.type==="err"?"err":s.type==="warn"?"warn":"ok"}/>
             </button>
@@ -7018,7 +7018,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
                           <td className="py-1.5 px-2 text-center"><span className="text-amber-600 font-semibold">null</span></td>
                           <td className="py-1.5 px-2 text-center">
                             <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved(r.wbs_code)}
-                              className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                              className="w-3.5 h-3.5 accent-[var(--primary-600)] cursor-pointer"/>
                           </td>
                           <td className="py-1.5 px-2 text-gray-400">{approved?"Acknowledged — no action needed":"Agree hrs with team lead"}</td>
                         </tr>
@@ -7056,7 +7056,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
                             <td className="py-1.5 px-2 text-gray-700">{r.description||"—"}</td>
                             <td className="py-1.5 px-2 text-center">
                               <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved(r.wbs_code)}
-                                className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                                className="w-3.5 h-3.5 accent-[var(--primary-600)] cursor-pointer"/>
                             </td>
                             <td className="py-1.5 px-2 text-gray-400">{approved?"Acknowledged":"Set standard hrs or approve as null"}</td>
                           </tr>
@@ -7091,7 +7091,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
                               className="w-3.5 h-3.5 accent-green-600 cursor-pointer"/>
                           </td>
                           <td className="py-1.5 px-2">
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${isMisc?"bg-gray-100 text-gray-600":"bg-blue-100 text-blue-700"}`}>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${isMisc?"bg-gray-100 text-gray-600":"bg-[var(--primary-100)] text-[var(--primary-700)]"}`}>
                               {isMisc?"Misc slot — estimator enters":"SCADA RTU panel"}
                             </span>
                           </td>
@@ -7131,7 +7131,7 @@ function WBSIntegrityPanel({ wbs, supply, nullApproved, toggleNullApproved }) {
                           <td className="py-1.5 px-2 font-mono text-purple-600">{r.linked}</td>
                           <td className="py-1.5 px-2 text-center">
                             <input type="checkbox" checked={approved} onChange={()=>toggleNullApproved("nocomm_"+r.wbs_code)}
-                              className="w-3.5 h-3.5 accent-blue-600 cursor-pointer"/>
+                              className="w-3.5 h-3.5 accent-[var(--primary-600)] cursor-pointer"/>
                           </td>
                         </tr>
                       );
@@ -7349,14 +7349,14 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
               onKeyDown={e=>e.key==="Enter"&&tryUnlock()}
               placeholder="PIN"
               autoFocus
-              className={`w-full text-center text-2xl font-mono tracking-widest border-2 rounded-lg px-3 py-3 mb-3 focus:outline-none ${pinError?"border-red-500 bg-red-50 animate-pulse":"border-gray-300 focus:border-blue-500"}`}
+              className={`w-full text-center text-2xl font-mono tracking-widest border-2 rounded-lg px-3 py-3 mb-3 focus:outline-none ${pinError?"border-red-500 bg-red-50 animate-pulse":"border-gray-300 focus:border-[var(--primary-500)]"}`}
             />
             {pinError && <div className="text-xs text-red-600 text-center mb-2">Incorrect PIN — try again</div>}
             <div className="flex gap-2">
               <button onClick={()=>{setShowPinModal(false);setPinInput("");}}
                 className="flex-1 text-xs border border-gray-200 text-gray-600 py-2 rounded-lg hover:bg-gray-50">Cancel</button>
               <button onClick={tryUnlock}
-                className="flex-1 text-xs bg-blue-700 hover:bg-blue-600 text-white py-2 rounded-lg font-semibold">Unlock</button>
+                className="flex-1 text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white py-2 rounded-lg font-semibold">Unlock</button>
             </div>
           </div>
         </div>
@@ -7405,13 +7405,13 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
         {tabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             className={`px-4 py-2.5 text-xs font-semibold border-b-2 mr-1 -mb-px flex items-center gap-1.5 transition-colors
-              ${tab===t.id?"border-blue-600 text-blue-700 bg-blue-50":"border-transparent text-gray-500 hover:text-gray-700"}`}>
+              ${tab===t.id?"border-[var(--primary-600)] text-[var(--primary-700)] bg-[var(--primary-50)]":"border-transparent text-gray-500 hover:text-gray-700"}`}>
             {t.label}
             {t.count!=null && <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded-full font-mono">{t.count}</span>}
           </button>
         ))}
         <div className="flex-1"/>
-        {loading&&<span className="text-xs text-blue-500 animate-pulse pb-2 pr-2">⟳ Loading…</span>}
+        {loading&&<span className="text-xs text-[var(--primary-500)] animate-pulse pb-2 pr-2">⟳ Loading…</span>}
         {!loading&&!error&&<span className="text-xs text-green-600 pb-2 pr-2">✓ {wbs.length} WBS · {rates.length} rates</span>}
         {error&&<span className="text-xs text-red-500 pb-2 pr-2">⚠ {error}</span>}
       </div>
@@ -7469,7 +7469,7 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
             <div className="flex border border-gray-200 rounded overflow-hidden">
               {[["active","Active"],["inactive","Inactive"],["all","All"]].map(([v,l])=>(
                 <button key={v} onClick={()=>setPeopleFilter(v)}
-                  className={`text-xs px-3 py-1.5 font-semibold transition-colors ${peopleFilter===v?"bg-blue-700 text-white":"text-gray-600 hover:bg-gray-50"}`}>{l}</button>
+                  className={`text-xs px-3 py-1.5 font-semibold transition-colors ${peopleFilter===v?"bg-[var(--primary-700)] text-white":"text-gray-600 hover:bg-gray-50"}`}>{l}</button>
               ))}
             </div>
             <span className="text-xs text-gray-400">{people.filter(p=>p.active).length} active · {people.filter(p=>!p.active).length} inactive</span>
@@ -7639,7 +7639,7 @@ function WBSManager({ equipSel, setEquipSel, onPriceUpdate }) {
 const TYPE_COLORS = {
   PCE:   { badge:"bg-amber-100 text-amber-800 border border-amber-300",   icon:"🔩", label:"Period Contract" },
   LLT:   { badge:"bg-red-100 text-red-700 border border-red-300",         icon:"⏱", label:"Long Lead Time"  },
-  SCADA: { badge:"bg-blue-100 text-blue-700 border border-blue-300",      icon:"📡", label:"SCADA"           },
+  SCADA: { badge:"bg-[var(--primary-100)] text-[var(--primary-700)] border border-[var(--primary-300)]",      icon:"📡", label:"SCADA"           },
   COMMS: { badge:"bg-purple-100 text-purple-700 border border-purple-300",icon:"📶", label:"Communications"  },
 };
 
@@ -7729,7 +7729,7 @@ function EquipmentScreen({ lines, setLines, isCommercial, inv }) {
             </div>
             <div className="text-right">
               <div className="text-xs text-gray-500 mb-1">Total Equipment Value</div>
-              <div className="text-xl font-bold text-blue-900">{fmt(grandTotal)}</div>
+              <div className="text-xl font-bold text-[var(--primary-900)]">{fmt(grandTotal)}</div>
               {isCommercial && <div className="text-sm font-bold text-orange-700">{fmt(grandTotalComm)} commercial</div>}
               <div className="text-xs text-gray-400 mt-1">{selected.length} item{selected.length!==1?"s":""} across {Object.values(selByType).filter(a=>a.length>0).length} categories</div>
             </div>
@@ -7792,7 +7792,7 @@ function EquipmentScreen({ lines, setLines, isCommercial, inv }) {
                     // Look up matching equipment record for make/model/contract
                     return (
                       <tr key={item.wbs_code} className="border-b hover:bg-gray-50">
-                        <td className="px-3 py-2 font-mono text-blue-600 whitespace-nowrap">{item.wbs_code}</td>
+                        <td className="px-3 py-2 font-mono text-[var(--primary-600)] whitespace-nowrap">{item.wbs_code}</td>
                         <td className="px-3 py-2 text-gray-800 font-medium max-w-xs truncate">{item.description}</td>
                         <td className="px-3 py-2 text-gray-500 text-xs font-mono truncate">{item.make||item.model||""}</td>
                         {type==="PCE"||type==="LLT" ? <td className="px-3 py-2 text-gray-500 font-mono text-xs">{item.contract_no||""}</td> : null}
@@ -8176,7 +8176,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
 
   const STEP_CLS = (idx) =>
     idx < step  ? "bg-green-600 text-white border-green-600"
-    : idx === step ? "bg-blue-600 text-white border-blue-600"
+    : idx === step ? "bg-[var(--primary-600)] text-white border-[var(--primary-600)]"
     :               "bg-white text-gray-400 border-gray-200";
 
   if (saved) return (
@@ -8186,8 +8186,8 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
         <div className="text-lg font-bold text-green-800 mb-2">WBS items created</div>
         <div className="text-sm text-gray-600 mb-2">{rows.length} row{rows.length !== 1 ? "s" : ""} saved as <span className="font-semibold text-amber-700">Pending Governance</span>.</div>
         <div className="text-xs text-gray-400 mb-4">Items will appear in the WBS editor marked pending. Cannot be used in estimates until WBS Manager confirms governance sign-off.</div>
-        {govRef && <div className="text-xs text-blue-600 mb-4">Governance ref: <span className="font-mono font-semibold">{govRef}</span></div>}
-        <button onClick={onClose} className="bg-blue-700 hover:bg-blue-600 text-white px-6 py-2 rounded font-semibold text-sm">Done</button>
+        {govRef && <div className="text-xs text-[var(--primary-600)] mb-4">Governance ref: <span className="font-mono font-semibold">{govRef}</span></div>}
+        <button onClick={onClose} className="bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-6 py-2 rounded font-semibold text-sm">Done</button>
       </div>
     </div>
   );
@@ -8205,12 +8205,12 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                 <div className={`w-5 h-5 rounded-full border flex-shrink-0 flex items-center justify-center text-[10px] font-bold ${STEP_CLS(idx)}`}>
                   {idx < step ? "v" : s.short}
                 </div>
-                <span className={`text-xs truncate ${idx === step ? "text-white font-medium" : "text-blue-300"}`}>{s.label}</span>
-                {idx < WIZ_STEPS.length - 1 && <div className="w-4 h-px bg-blue-700 flex-shrink-0 ml-1"/>}
+                <span className={`text-xs truncate ${idx === step ? "text-white font-medium" : "text-[var(--primary-300)]"}`}>{s.label}</span>
+                {idx < WIZ_STEPS.length - 1 && <div className="w-4 h-px bg-[var(--primary-700)] flex-shrink-0 ml-1"/>}
               </div>
             ))}
           </div>
-          <button onClick={onClose} className="text-blue-300 hover:text-white text-lg leading-none ml-2 flex-shrink-0">x</button>
+          <button onClick={onClose} className="text-[var(--primary-300)] hover:text-white text-lg leading-none ml-2 flex-shrink-0">x</button>
         </div>
 
         {/* Body */}
@@ -8222,7 +8222,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
               <div className="text-[9px] font-semibold uppercase tracking-wide text-gray-400 mb-2">WBS context</div>
               <div className="text-[10px] text-gray-600 space-y-1">
                 {parentNode && <div><span className="text-gray-400">Parent: </span><span className="font-mono font-medium">{parentNode}</span></div>}
-                {deviceCode  && <div><span className="text-gray-400">L4: </span><span className="font-mono font-medium text-blue-700">{deviceCode}</span></div>}
+                {deviceCode  && <div><span className="text-gray-400">L4: </span><span className="font-mono font-medium text-[var(--primary-700)]">{deviceCode}</span></div>}
                 {deviceDesc  && <div><span className="text-gray-400">Group: </span><span className="font-medium">{deviceDesc}</span></div>}
               </div>
             </div>
@@ -8242,9 +8242,9 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
               </div>
             </div>
             {prefill && (prefill.description || prefill.make_model) && (
-              <div className="bg-blue-50 border border-blue-200 rounded p-2">
-                <div className="text-[9px] font-semibold uppercase tracking-wide text-blue-600 mb-1">Pre-filled</div>
-                <div className="text-[10px] text-blue-700 space-y-0.5">
+              <div className="bg-[var(--primary-50)] border border-[var(--primary-200)] rounded p-2">
+                <div className="text-[9px] font-semibold uppercase tracking-wide text-[var(--primary-600)] mb-1">Pre-filled</div>
+                <div className="text-[10px] text-[var(--primary-700)] space-y-0.5">
                   {prefill.description && <div>{prefill.description}</div>}
                   {prefill.make_model  && <div className="text-gray-500">{prefill.make_model}</div>}
                   {prefill.price > 0   && <div className="font-semibold">${parseFloat(prefill.price).toLocaleString()}</div>}
@@ -8265,20 +8265,20 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                     <label className="text-[10px] text-gray-500 block mb-0.5">Parent node (optional context)</label>
                     <input value={parentNode} onChange={e=>setParentNode(e.target.value)}
                       placeholder="e.g. 3.1.3 -- HV plant"
-                      className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      className="w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">L4 device group code *</label>
                     <input value={deviceCode} onChange={e=>setDeviceCode(e.target.value)}
                       placeholder="e.g. 3.1.3.04"
-                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "focus:ring-blue-400")}/>
+                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "focus:ring-[var(--primary-400)]")}/>
                     {l4Desc && (
-                      <div className="text-[10px] text-blue-700 font-semibold mt-0.5">
+                      <div className="text-[10px] text-[var(--primary-700)] font-semibold mt-0.5">
                         {deviceCode.trim()} -- {l4Desc}
                       </div>
                     )}
                     {l4Exists && !dupSupply && (
-                      <div className="text-[10px] text-blue-600 mt-0.5 flex items-center gap-1">
+                      <div className="text-[10px] text-[var(--primary-600)] mt-0.5 flex items-center gap-1">
                         <span>&#9432;</span> Adding new item to existing group
                       </div>
                     )}
@@ -8290,20 +8290,20 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                     <label className="text-[10px] text-gray-500 block mb-0.5">Device group description *</label>
                     <input value={deviceDesc} onChange={e=>setDeviceDesc(e.target.value)}
                       placeholder="e.g. 66kV Surge Arresters"
-                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">Item suffix <span className="text-gray-400 font-normal">(or type any number)</span></label>
                     <input value={itemNo} onChange={e=>setItemNo(e.target.value.replace(/[^0-9]/g,"").padStart(2,"0").slice(-2) || e.target.value)}
                       list="item-suffix-list"
-                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "border-gray-300 focus:ring-blue-400")}/>
+                      className={"w-full border rounded px-2 py-1 text-xs font-mono focus:outline-none focus:ring-1 " + (dupSupply ? "border-red-400 bg-red-50" : "border-gray-300 focus:ring-[var(--primary-400)]")}/>
                     <datalist id="item-suffix-list">
                       {Array.from({length:60},(_,i)=>String(i+1).padStart(2,"0")).map(n=><option key={n} value={n}/>)}
                     </datalist>
                   </div>
                 </div>
                 {supplyCode && (
-                  <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-[10px] text-blue-700">
+                  <div className="bg-[var(--primary-50)] border border-[var(--primary-200)] rounded px-2 py-1.5 text-[10px] text-[var(--primary-700)]">
                     Supply: <span className="font-mono font-semibold">{supplyCode}</span>
                     {installCode && <span className="ml-3">Install: <span className="font-mono">{installCode}</span></span>}
                     {commCode && <span className="ml-3">Commission: <span className="font-mono font-semibold text-green-700">{commCode}</span></span>}
@@ -8381,7 +8381,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                           </div>
                         )}
                         {commL4HasItems && (
-                          <div className="text-[10px] text-blue-600 mt-0.5">
+                          <div className="text-[10px] text-[var(--primary-600)] mt-0.5">
                             {commTakenSuffixes.size} existing commission {commTakenSuffixes.size === 1 ? "row" : "rows"} in this group
                           </div>
                         )}
@@ -8397,10 +8397,10 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                         </datalist>
                         {commTakenSuffixes.size > 0 && (
                           <div className="text-[10px] text-amber-700 mt-0.5">
-                            Next free: <span className="font-mono font-semibold text-blue-700">{commNextFree}</span>
+                            Next free: <span className="font-mono font-semibold text-[var(--primary-700)]">{commNextFree}</span>
                             {commItemNo !== commNextFree && (
                               <button onClick={()=>setCommItemNo(commNextFree)}
-                                className="ml-1 underline text-blue-600 hover:text-blue-800">Use {commNextFree}</button>
+                                className="ml-1 underline text-[var(--primary-600)] hover:text-[var(--primary-800)]">Use {commNextFree}</button>
                             )}
                           </div>
                         )}
@@ -8426,10 +8426,10 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                       ))}
                     </div>
                     <div className="text-amber-700">
-                      Next free suffix: <span className="font-mono font-semibold text-blue-700">{nextFreeSuffix}</span>
+                      Next free suffix: <span className="font-mono font-semibold text-[var(--primary-700)]">{nextFreeSuffix}</span>
                       {itemNo !== nextFreeSuffix && (
                         <button onClick={()=>setItemNo(nextFreeSuffix)}
-                          className="ml-2 underline text-blue-600 hover:text-blue-800">Use {nextFreeSuffix}</button>
+                          className="ml-2 underline text-[var(--primary-600)] hover:text-[var(--primary-800)]">Use {nextFreeSuffix}</button>
                       )}
                     </div>
                   </div>
@@ -8438,7 +8438,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                   <label className="text-[10px] text-gray-500 block mb-1.5">Scope pattern *</label>
                   <div className="space-y-1.5">
                     {WIZ_SCOPE_PATTERNS.map(p => (
-                      <label key={p.id} className={"flex items-start gap-2 p-2 rounded border cursor-pointer text-xs " + (scopePattern === p.id ? "bg-blue-50 border-blue-300" : "border-gray-200 hover:border-gray-300")}>
+                      <label key={p.id} className={"flex items-start gap-2 p-2 rounded border cursor-pointer text-xs " + (scopePattern === p.id ? "bg-[var(--primary-50)] border-[var(--primary-300)]" : "border-gray-200 hover:border-gray-300")}>
                         <input type="radio" name="scope_pattern" value={p.id}
                           checked={scopePattern === p.id} onChange={()=>setScopePattern(p.id)}
                           className="mt-0.5 flex-shrink-0"/>
@@ -8457,7 +8457,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
             {step === 1 && (
               <div className="space-y-3">
                 <div className="text-xs font-semibold text-gray-700 pb-1.5 border-b">Step 2 -- supply item definition</div>
-                <div className="bg-blue-50 border border-blue-200 rounded px-2 py-1.5 text-[10px] text-blue-700">
+                <div className="bg-[var(--primary-50)] border border-[var(--primary-200)] rounded px-2 py-1.5 text-[10px] text-[var(--primary-700)]">
                   Defining supply item for <span className="font-mono font-semibold">{supplyCode}</span>
                   {prefill && prefill.description ? " -- pre-filled from catalogue item." : ""}
                 </div>
@@ -8465,27 +8465,27 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                   <label className="text-[10px] text-gray-500 block mb-0.5">Item description *</label>
                   <input value={supplyDesc} onChange={e=>setSupplyDesc(e.target.value)}
                     placeholder="e.g. 66kV Surge Arrester -- 10kA station class"
-                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                    className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                 </div>
                 {make !== "" && (
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">Make / model</label>
                     <input value={make} onChange={e=>setMake(e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                   </div>
                 )}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">AER resource type *</label>
                     <select value={aer} onChange={e=>setAer(e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                       {WIZ_AER_TYPES.map(t=><option key={t}>{t}</option>)}
                     </select>
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">Delivery method</label>
                     <select value={delivery} onChange={e=>setDelivery(e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                       {WIZ_DELIVERY.map(d=><option key={d}>{d}</option>)}
                     </select>
                   </div>
@@ -8495,13 +8495,13 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                     <label className="text-[10px] text-gray-500 block mb-0.5">Unit price / PCE price ($)</label>
                     <input type="number" min="0" step="0.01" value={price} onChange={e=>setPrice(e.target.value)}
                       placeholder="0 or leave blank for GAP"
-                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                     {!price && <div className="text-[10px] text-amber-600 mt-0.5">No price -- will show as GAP</div>}
                   </div>
                   <div>
                     <label className="text-[10px] text-gray-500 block mb-0.5">LLT item?</label>
                     <select value={isLLT ? "yes" : "no"} onChange={e=>setIsLLT(e.target.value === "yes")}
-                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                      className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                       <option value="no">No -- standard lead time</option>
                       <option value="yes">Yes -- triggers Copperleaf B-row</option>
                     </select>
@@ -8528,12 +8528,12 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Crew size</label>
                             <input type="number" min="1" max="20" value={installCrew} onChange={e=>setInstallCrew(e.target.value)}
-                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Hours per person</label>
                             <input type="number" min="0" step="0.5" value={installHrs} onChange={e=>setInstallHrs(e.target.value)}
-                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Total hrs / unit</label>
@@ -8551,12 +8551,12 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Base hrs / unit</label>
                             <input type="number" min="0" step="0.5" value={commHrs} onChange={e=>setCommHrs(e.target.value)}
-                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                              className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">Scaling profile</label>
                             <select value={scalingProfile} onChange={e=>setScalingProfile(e.target.value)}
-                              className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-400">
+                              className="w-full border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]">
                               {WIZ_SCALING_PROFILES.map(p=><option key={p}>{p}</option>)}
                             </select>
                           </div>
@@ -8590,9 +8590,9 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                   <tbody>
                     {rows.map((r, i) => (
                       <tr key={i} className={i % 2 === 0 ? "bg-gray-50" : "bg-white"}>
-                        <td className="py-1.5 px-2 font-mono text-blue-700 font-semibold">{r.code}</td>
+                        <td className="py-1.5 px-2 font-mono text-[var(--primary-700)] font-semibold">{r.code}</td>
                         <td className="py-1.5 px-2">
-                          <span className={"px-1.5 py-0.5 rounded text-[9px] font-semibold " + (r.scope==="Supply"?"bg-blue-100 text-blue-800":r.scope==="Install"?"bg-green-100 text-green-800":"bg-amber-100 text-amber-800")}>{r.scope}</span>
+                          <span className={"px-1.5 py-0.5 rounded text-[9px] font-semibold " + (r.scope==="Supply"?"bg-[var(--primary-100)] text-[var(--primary-800)]":r.scope==="Install"?"bg-green-100 text-green-800":"bg-amber-100 text-amber-800")}>{r.scope}</span>
                         </td>
                         <td className="py-1.5 px-2 text-gray-700">{r.desc}</td>
                         <td className="py-1.5 px-2 text-right text-gray-600">{r.hrs !== null ? fmtHrs(r.hrs) : "--"}</td>
@@ -8618,14 +8618,14 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
                       <input type="password" value={pinInput} onChange={e=>{setPinInput(e.target.value);setPinError(false);}}
                         onKeyDown={e=>{ if(e.key==="Enter") trySubmit(); }}
                         placeholder="Enter PIN"
-                        className={"w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 " + (pinError ? "border-red-400 bg-red-50 focus:ring-red-400" : "focus:ring-blue-400")}/>
+                        className={"w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 " + (pinError ? "border-red-400 bg-red-50 focus:ring-red-400" : "focus:ring-[var(--primary-400)]")}/>
                       {pinError && <div className="text-[10px] text-red-600 mt-0.5">Incorrect PIN</div>}
                     </div>
                     <div className="flex-1">
                       <label className="text-[10px] text-gray-500 block mb-0.5">Governance ref (optional)</label>
                       <input value={govRef} onChange={e=>setGovRef(e.target.value)}
                         placeholder="e.g. GOV-2026-041"
-                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                     </div>
                   </div>
                 </div>
@@ -8645,7 +8645,7 @@ function WBSWizard({ onClose, onSave, prefill, existingCodes }) {
             <button onClick={onClose} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
             {step < 3 ? (
               <button onClick={()=>setStep(s=>s+1)} disabled={!canNext()}
-                className="text-xs bg-blue-700 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-5 py-1.5 rounded font-semibold">
+                className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white px-5 py-1.5 rounded font-semibold">
                 Next
               </button>
             ) : (
@@ -8709,7 +8709,7 @@ function EscStreamSelector({ streamKey, setStreamKey, manualRates, setManualRate
   const streamColors = {
     Materials:   "border-purple-400 bg-purple-50 text-purple-800",
     Contractors: "border-orange-400 bg-orange-50 text-orange-800",
-    EEInternal:  "border-blue-400 bg-blue-50 text-blue-800",
+    EEInternal:  "border-[var(--primary-400)] bg-[var(--primary-50)] text-[var(--primary-800)]",
     Manual:      "border-gray-400 bg-gray-50 text-gray-700",
   };
   return (
@@ -8866,7 +8866,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
 
   const srcBadge = (src) => {
     const cfg = {
-      PCE:   "bg-blue-100 text-blue-800 border-blue-200",
+      PCE:   "bg-[var(--primary-100)] text-[var(--primary-800)] border-[var(--primary-200)]",
       SCADA: "bg-purple-100 text-purple-800 border-purple-200",
       Comms: "bg-teal-100 text-teal-800 border-teal-200",
     };
@@ -8894,7 +8894,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
       <div className="bg-white border-b px-3 py-2 flex items-center gap-2 flex-shrink-0 flex-wrap">
         <input value={search} onChange={e=>setSearch(e.target.value)}
           placeholder="Search WBS, description, make, category..."
-          className="border border-gray-300 rounded px-2 py-1 text-xs w-56 focus:outline-none focus:ring-1 focus:ring-blue-300"/>
+          className="border border-gray-300 rounded px-2 py-1 text-xs w-56 focus:outline-none focus:ring-1 focus:ring-[var(--primary-300)]"/>
         {search && <button onClick={()=>setSearch("")} className="text-gray-400 text-xs hover:text-gray-600">x</button>}
         <select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}
           className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none">
@@ -8927,16 +8927,16 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
       </div>
 
       {/* Data flow notice */}
-      <div className="bg-blue-50 border-b border-blue-200 px-3 py-1.5 text-[10px] text-blue-700 flex items-center gap-2 flex-shrink-0 flex-wrap">
+      <div className="bg-[var(--primary-50)] border-b border-[var(--primary-200)] px-3 py-1.5 text-[10px] text-[var(--primary-700)] flex items-center gap-2 flex-shrink-0 flex-wrap">
         <span className="font-semibold">Data flow:</span>
-        <span className="font-mono bg-blue-100 px-1 rounded">Base Price (catalogue)</span>
-        <span className="text-blue-400">stored as-is, not pre-escalated</span>
+        <span className="font-mono bg-[var(--primary-100)] px-1 rounded">Base Price (catalogue)</span>
+        <span className="text-[var(--primary-400)]">stored as-is, not pre-escalated</span>
         <span>-&gt;</span>
         <span className="font-mono bg-green-100 text-green-800 px-1 rounded font-semibold">Escalated Cost</span>
-        <span className="text-blue-400">derived by engine using project timeline + stream rates</span>
+        <span className="text-[var(--primary-400)]">derived by engine using project timeline + stream rates</span>
         <span>-&gt;</span>
         <span className="font-mono bg-orange-100 text-orange-800 px-1 rounded">pce_price -&gt; materials cost</span>
-        <span className="ml-auto text-blue-400 italic">Escalation preview is reference only</span>
+        <span className="ml-auto text-[var(--primary-400)] italic">Escalation preview is reference only</span>
       </div>
 
       {/* Item list */}
@@ -8952,14 +8952,14 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
 
           return (
             <div key={r.wbs_code}
-              className={`border-b ${isStale&&!isEd?"bg-amber-50/30":isEd?"bg-blue-50":r._edited?"bg-orange-50/30":""}`}>
+              className={`border-b ${isStale&&!isEd?"bg-amber-50/30":isEd?"bg-[var(--primary-50)]":r._edited?"bg-orange-50/30":""}`}>
 
               {/* Main compact row */}
               <div className="flex items-center px-3 py-2 gap-2 text-xs">
                 <button
                   onClick={()=>setExpanded(p=>({...p,[r.wbs_code]:!p[r.wbs_code]}))}
                   className={`flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-xs transition-colors ${
-                    isExp ? "bg-blue-600 text-white" : "text-gray-300 hover:text-blue-500 hover:bg-blue-50"
+                    isExp ? "bg-[var(--primary-600)] text-white" : "text-gray-300 hover:text-[var(--primary-500)] hover:bg-[var(--primary-50)]"
                   }`}>
                   {isExp ? "v" : ">"}
                 </button>
@@ -8976,10 +8976,10 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                   {isEd ? (
                     <input type="number" step="0.01" value={editVals.base_price}
                       onChange={e=>setEditVals(p=>({...p,base_price:e.target.value}))}
-                      className="w-full border border-blue-300 bg-white rounded px-1.5 py-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-full border border-[var(--primary-300)] bg-white rounded px-1.5 py-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"
                       placeholder="Base price"/>
                   ) : (
-                    <span className="text-blue-800 font-medium">{fmtPrice(r.base_price)}</span>
+                    <span className="text-[var(--primary-800)] font-medium">{fmtPrice(r.base_price)}</span>
                   )}
                 </div>
 
@@ -8988,7 +8988,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                   {isEd ? (
                     <input type="date" value={editVals.price_date}
                       onChange={e=>setEditVals(p=>({...p,price_date:e.target.value}))}
-                      className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                      className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
                   ) : (
                     <span className={`text-[10px] ${isStale?"text-amber-700 font-semibold":"text-gray-500"}`}>
                       {r.price_date || "--"}
@@ -9040,7 +9040,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                     </div>
                   ) : (
                     <button onClick={()=>startEdit(r)}
-                      className="text-blue-400 hover:text-blue-700 text-[10px] border border-blue-200 hover:border-blue-400 rounded px-2 py-0.5">
+                      className="text-[var(--primary-400)] hover:text-[var(--primary-700)] text-[10px] border border-[var(--primary-200)] hover:border-[var(--primary-400)] rounded px-2 py-0.5">
                       Edit
                     </button>
                   ))}
@@ -9072,7 +9072,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                         onClick={()=>setHistTab(p=>({...p,[r.wbs_code]:t.id}))}
                         className={`px-3 py-1.5 text-[10px] font-medium border-b-2 transition-colors ${
                           itemTab===t.id
-                            ? "border-blue-500 text-blue-700 bg-white"
+                            ? "border-[var(--primary-500)] text-[var(--primary-700)] bg-white"
                             : "border-transparent text-gray-500 hover:text-gray-700"
                         }`}>{t.label}</button>
                     ))}
@@ -9081,8 +9081,8 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                         onClick={()=>setHistTab(p=>({...p,[r.wbs_code]:"edit"}))}
                         className={`px-3 py-1.5 text-[10px] font-medium border-b-2 transition-colors ${
                           itemTab==="edit"
-                            ? "border-blue-500 text-blue-700 bg-blue-50"
-                            : "border-transparent text-blue-500 hover:text-blue-700"
+                            ? "border-[var(--primary-500)] text-[var(--primary-700)] bg-[var(--primary-50)]"
+                            : "border-transparent text-[var(--primary-500)] hover:text-[var(--primary-700)]"
                         }`}>Edit price</button>
                     )}
                   </div>
@@ -9090,7 +9090,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                   {/* TAB: Price history */}
                   {itemTab === "history" && (
                     <div className="p-3">
-                      <div className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mb-3">
+                      <div className="text-[10px] text-[var(--primary-700)] bg-[var(--primary-50)] border border-[var(--primary-200)] rounded px-2 py-1.5 mb-3">
                         <span className="font-semibold">Base prices only</span> -- raw contract prices stored in the catalogue.
                         Escalation applied by estimation engine per project timeline. See Escalation preview tab to project forward.
                       </div>
@@ -9145,7 +9145,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                         <div className="mt-2 flex gap-2">
                           <button
                             onClick={()=>{startEdit(r);setHistTab(p=>({...p,[r.wbs_code]:"edit"}));}}
-                            className="text-[10px] border border-blue-300 text-blue-700 hover:bg-blue-50 rounded px-3 py-1">
+                            className="text-[10px] border border-[var(--primary-300)] text-[var(--primary-700)] hover:bg-[var(--primary-50)] rounded px-3 py-1">
                             Enter FY27 price
                           </button>
                         </div>
@@ -9157,7 +9157,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                   {itemTab === "escalation" && (
                     <div className="p-3">
                       <div className="text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded px-2 py-1.5 mb-3">
-                        Preview only -- base price <span className="font-semibold text-blue-700">{fmtPrice(r.base_price)}</span> projected
+                        Preview only -- base price <span className="font-semibold text-[var(--primary-700)]">{fmtPrice(r.base_price)}</span> projected
                         forward using selected stream. Does not affect stored values. Choose stream or enter manual rates.
                       </div>
                       <div className="mb-3 p-2 bg-gray-50 border border-gray-200 rounded">
@@ -9169,10 +9169,10 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                         {FY_OPTIONS.map(fy => (
                           <button key={fy} onClick={()=>setHighlightFY(fy)}
                             className={`text-[10px] px-2 py-0.5 rounded border ${
-                              highlightFY===fy ? "bg-blue-600 text-white border-blue-600" : "border-gray-200 text-gray-500 hover:border-gray-300"
+                              highlightFY===fy ? "bg-[var(--primary-600)] text-white border-[var(--primary-600)]" : "border-gray-200 text-gray-500 hover:border-gray-300"
                             }`}>{fy}</button>
                         ))}
-                        <span className="ml-2 text-[10px] text-blue-600 font-semibold">
+                        <span className="ml-2 text-[10px] text-[var(--primary-600)] font-semibold">
                           {fmtPriceRound(escToFY(r.base_price, escStream, manualRates, highlightFY))}/unit in {highlightFY}
                         </span>
                       </div>
@@ -9191,12 +9191,12 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                   {/* TAB: Item details */}
                   {itemTab === "details" && (
                     <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-0 divide-x divide-y border border-gray-100">
-                      <div className="p-3 bg-blue-50/60 col-span-2">
+                      <div className="p-3 bg-[var(--primary-50)]/60 col-span-2">
                         <div className="text-[10px] text-gray-500 uppercase font-semibold mb-2 border-b pb-1">Pricing (base -- not escalated)</div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                           <div>
                             <div className="text-[10px] text-gray-400">Base contract price</div>
-                            <div className="font-bold text-blue-800 text-sm">{fmtPrice(r.base_price)}</div>
+                            <div className="font-bold text-[var(--primary-800)] text-sm">{fmtPrice(r.base_price)}</div>
                             <div className="text-[10px] text-gray-400">as at {r.price_date||"unknown"}</div>
                           </div>
                           <div>
@@ -9246,8 +9246,8 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
 
                   {/* TAB: Edit price (Manager Mode only) */}
                   {itemTab === "edit" && isEd && (
-                    <div className="p-3 bg-blue-50 border-t-2 border-blue-400">
-                      <div className="text-[10px] text-blue-700 font-semibold uppercase mb-3">
+                    <div className="p-3 bg-[var(--primary-50)] border-t-2 border-[var(--primary-400)]">
+                      <div className="text-[10px] text-[var(--primary-700)] font-semibold uppercase mb-3">
                         Edit pricing -- enter the actual contract price. Do not pre-escalate.
                       </div>
                       <div className="grid grid-cols-4 gap-3 mb-3">
@@ -9255,13 +9255,13 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
                           <label className="text-[10px] text-gray-500 block mb-0.5">Base price ($) *</label>
                           <input type="number" step="0.01" value={editVals.base_price}
                             onChange={e=>setEditVals(p=>({...p,base_price:e.target.value}))}
-                            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
+                            className="w-full border-2 border-[var(--primary-400)] rounded px-2 py-1 text-xs focus:outline-none"/>
                         </div>
                         <div>
                           <label className="text-[10px] text-gray-500 block mb-0.5">Price date *</label>
                           <input type="date" value={editVals.price_date}
                             onChange={e=>setEditVals(p=>({...p,price_date:e.target.value}))}
-                            className="w-full border-2 border-blue-400 rounded px-2 py-1 text-xs focus:outline-none"/>
+                            className="w-full border-2 border-[var(--primary-400)] rounded px-2 py-1 text-xs focus:outline-none"/>
                         </div>
                         <div>
                           <label className="text-[10px] text-gray-500 block mb-0.5">Single-rate esc. % (legacy)</label>
@@ -9347,7 +9347,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
         <div className="fixed inset-0 z-40 bg-black/30 flex items-center justify-center">
           <div className="bg-white rounded-xl shadow-2xl p-5 w-[480px]">
             <div className="text-sm font-bold text-gray-800 mb-2">Add item -- Path A (existing WBS)</div>
-            <div className="text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mb-3">Adds catalogue pricing metadata. Links to an existing supply WBS row. Active immediately.</div>
+            <div className="text-[10px] text-[var(--primary-700)] bg-[var(--primary-50)] border border-[var(--primary-200)] rounded px-2 py-1.5 mb-3">Adds catalogue pricing metadata. Links to an existing supply WBS row. Active immediately.</div>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {[["Description *","desc","text"],["Make / Model","make","text"],["WBS Code *","wbs","text"],["Price ($)","price","number"],["Contract No.","contract","text"],["Lead time (wks)","lead","number"]].map(([lbl,key,typ])=>(
                 <div key={key}>
@@ -9375,7 +9375,7 @@ function EquipmentPricingEditor({ managerMode, onUnlock, onPriceUpdate }) {
         />
       )}
       <div className="flex-shrink-0 border-t bg-gray-50 px-3 py-1.5 flex items-center gap-4 text-[10px] text-gray-500 flex-wrap">
-        <span><span className="bg-blue-100 text-blue-800 px-1 rounded font-semibold border border-blue-200">PCE</span> Period Contract</span>
+        <span><span className="bg-[var(--primary-100)] text-[var(--primary-800)] px-1 rounded font-semibold border border-[var(--primary-200)]">PCE</span> Period Contract</span>
         <span><span className="bg-purple-100 text-purple-800 px-1 rounded font-semibold border border-purple-200">SCADA</span> SCADA BOM</span>
         <span><span className="bg-teal-100 text-teal-800 px-1 rounded font-semibold border border-teal-200">Comms</span> Comms Price List</span>
         <span className="text-amber-700">Amber = &gt;2yr old</span>
@@ -9544,11 +9544,11 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
               onChange={e=>setPinInput(e.target.value)}
               onKeyDown={e=>{ if(e.key==="Enter") tryUnlock(); if(e.key==="Escape") setShowPinModal(false); }}
               autoFocus placeholder="Enter PIN"
-              className={`w-full border-2 rounded px-3 py-2 text-sm text-center font-mono tracking-widest focus:outline-none mb-3 ${pinError?"border-red-400 bg-red-50 animate-pulse":"border-gray-300 focus:border-blue-400"}`}/>
+              className={`w-full border-2 rounded px-3 py-2 text-sm text-center font-mono tracking-widest focus:outline-none mb-3 ${pinError?"border-red-400 bg-red-50 animate-pulse":"border-gray-300 focus:border-[var(--primary-400)]"}`}/>
             {pinError && <div className="text-xs text-red-600 text-center mb-2">Incorrect PIN</div>}
             <div className="flex gap-2">
               <button onClick={()=>{setShowPinModal(false);setPinInput("");}} className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={tryUnlock} className="flex-1 bg-blue-700 hover:bg-blue-600 text-white rounded px-3 py-1.5 text-xs font-semibold">Unlock</button>
+              <button onClick={tryUnlock} className="flex-1 bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white rounded px-3 py-1.5 text-xs font-semibold">Unlock</button>
             </div>
           </div>
         </div>
@@ -9710,7 +9710,7 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                   <div className="text-[10px] text-amber-700 mt-0.5">
                     Not found in supply -- use Path B wizard to create WBS rows first.
                     <button onClick={() => { setWizardPrefill({description:newItem.description,make_model:newItem.make_model,price:newItem.price}); setShowAddPath("wizard"); }}
-                      className="ml-1 underline text-blue-600">Switch to wizard</button>
+                      className="ml-1 underline text-[var(--primary-600)]">Switch to wizard</button>
                   </div>
                 )}
               </div>
@@ -9786,7 +9786,7 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                 <th className="text-left px-2 py-2 font-semibold text-gray-500 w-24">Contract</th>
                 <th className="text-center px-2 py-2 font-semibold text-red-600 w-16">Lead</th>
                 <th className="text-right px-2 py-2 font-semibold text-gray-500 w-24">Price</th>
-                <th className="text-center px-2 py-2 font-semibold text-blue-500 w-16" title="WBS linkage to supply items and WBS Master">Linked</th>
+                <th className="text-center px-2 py-2 font-semibold text-[var(--primary-500)] w-16" title="WBS linkage to supply items and WBS Master">Linked</th>
                 <th className="text-center px-2 py-2 font-semibold text-gray-400 w-14">Actions</th>
               </tr>
             </thead>
@@ -9796,15 +9796,15 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                 const tc   = TYPE_COLORS[item.type] || {badge:"bg-gray-100 text-gray-500", icon:"•"};
                 return (
                   <tr key={item.id}
-                    className={`border-b transition-colors ${idx%2===0?"bg-white":"bg-gray-50"} hover:bg-blue-50`}>
+                    className={`border-b transition-colors ${idx%2===0?"bg-white":"bg-gray-50"} hover:bg-[var(--primary-50)]`}>
                     <td className="px-2 py-1.5">
                       <span className={`text-xs px-1 py-0.5 rounded font-medium ${tc.badge}`}>{tc.icon}</span>
                     </td>
                     <td className="px-2 py-1.5">
                       {isEd
                         ? <input value={editVals.wbs_code} onChange={e => setEditVals(p => ({...p, wbs_code:e.target.value}))}
-                            className="w-full border border-blue-300 rounded px-1 py-0.5 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
-                        : <span className="font-mono text-blue-600">{item.wbs_code || <span className="text-orange-400 italic">TBA</span>}</span>
+                            className="w-full border border-[var(--primary-300)] rounded px-1 py-0.5 font-mono text-xs focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
+                        : <span className="font-mono text-[var(--primary-600)]">{item.wbs_code || <span className="text-orange-400 italic">TBA</span>}</span>
                       }
                     </td>
                     <td className="px-2 py-1.5 text-gray-800 max-w-xs">
@@ -9861,7 +9861,7 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                           <span className="bg-green-100 text-green-700 border border-green-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code found in supply items and WBS Master — will appear in Estimation Tool">✓ Live</span>
                         );
                         if (inMaster && !inSupply) return (
-                          <span className="bg-blue-100 text-blue-700 border border-blue-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code in WBS Master but not in supply — may not appear in estimation">WBS only</span>
+                          <span className="bg-[var(--primary-100)] text-[var(--primary-700)] border border-[var(--primary-300)] rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code in WBS Master but not in supply — may not appear in estimation">WBS only</span>
                         );
                         if (inSupply && !inMaster) return (
                           <span className="bg-amber-100 text-amber-700 border border-amber-300 rounded px-1 py-0.5 text-[10px] font-semibold" title="WBS code in supply items — will show in estimation but not in WBS master list">Supply</span>
@@ -9873,13 +9873,13 @@ function EquipmentCatalogueManager({ equipSel, setEquipSel }) {
                       {isEd ? (
                         <div className="flex gap-1 justify-center">
                           <button onClick={() => saveEdit(item.id)}
-                            className="bg-blue-700 hover:bg-blue-600 text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">Save</button>
+                            className="bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-1.5 py-0.5 rounded text-[10px] font-semibold">Save</button>
                           <button onClick={() => setEditing(null)}
                             className="border border-gray-300 text-gray-600 hover:bg-gray-50 px-1.5 py-0.5 rounded text-[10px]">✕</button>
                         </div>
                       ) : (
                         managerMode
-                          ? <button onClick={() => startEdit(item)} className="text-blue-500 hover:text-blue-700 text-[10px] border border-blue-200 hover:border-blue-400 px-1.5 py-0.5 rounded">Edit</button>
+                          ? <button onClick={() => startEdit(item)} className="text-[var(--primary-500)] hover:text-[var(--primary-700)] text-[10px] border border-[var(--primary-200)] hover:border-[var(--primary-400)] px-1.5 py-0.5 rounded">Edit</button>
                           : <span className="text-gray-300 text-[10px]" title="Unlock Manager Mode to edit">🔒</span>
                       )}
                     </td>
@@ -9917,7 +9917,73 @@ const APP_TABS = [
   {id:"hub",        label:"🔍 Investment Hub"},
   {id:"estimation", label:"⚡ Estimation Tool"},
   {id:"wbsmanager", label:"🗂 WBS Manager"},
+  {id:"settings",   label:"🎨 Settings"},
 ];
+
+// ── THEMES ──────────────────────────────────────────────────────
+// Each theme maps to a [data-theme] block in index.css that defines
+// the --primary-50..900 (and --accent-*) CSS variables used across
+// the app's headers, tabs, buttons, badges and links.
+const THEMES = [
+  {
+    id: "ee", name: "Essential Energy", desc: "Corporate navy & orange (default)",
+    swatches: ["#002266", "#1F478A", "#4A7BC1", "#FF5300"],
+  },
+  {
+    id: "classic", name: "Classic Blue", desc: "Original demo blue theme",
+    swatches: ["#1e3a8a", "#1d4ed8", "#3b82f6", "#ea580c"],
+  },
+  {
+    id: "slate", name: "Slate", desc: "Neutral monochrome theme",
+    swatches: ["#0f172a", "#334155", "#64748b", "#d97706"],
+  },
+];
+
+function ThemeSettings({ theme, onChange }) {
+  return (
+    <div className="flex-1 overflow-auto p-6 bg-gray-50">
+      <div className="max-w-3xl mx-auto">
+        <h2 className="text-lg font-bold text-gray-900 mb-1">🎨 Appearance</h2>
+        <p className="text-xs text-gray-500 mb-5">
+          Choose a colour theme for the demo. The Essential Energy theme matches our corporate
+          branding (navy &amp; orange); the alternates are useful for contrast/comparison during
+          stakeholder reviews. Your choice is saved in this browser only.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {THEMES.map(t => {
+            const active = theme === t.id;
+            return (
+              <button key={t.id} onClick={() => onChange(t.id)}
+                className={`text-left rounded-xl border-2 p-4 bg-white transition-all ${
+                  active ? "border-[var(--primary-600)] shadow-md ring-2 ring-[var(--primary-200)]" : "border-gray-200 hover:border-gray-300 hover:shadow-sm"}`}>
+                <div className="flex gap-1.5 mb-3">
+                  {t.swatches.map((c,i)=>(
+                    <div key={i} className="h-8 flex-1 rounded" style={{background:c}}/>
+                  ))}
+                </div>
+                <div className="font-semibold text-sm text-gray-900 flex items-center gap-1.5">
+                  {t.name}
+                  {active && <span className="text-[var(--primary-600)]">✓</span>}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">{t.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-6 bg-white border border-gray-200 rounded-xl p-4">
+          <div className="text-xs font-semibold text-gray-700 mb-2">Live preview</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-3 py-1.5 rounded text-xs font-semibold text-white bg-[var(--primary-600)]">Primary button</span>
+            <span className="px-3 py-1.5 rounded text-xs font-semibold border border-[var(--primary-200)] bg-[var(--primary-50)] text-[var(--primary-700)]">Light badge</span>
+            <span className="px-3 py-1.5 rounded text-xs font-bold text-white" style={{background:"var(--accent-600)"}}>Accent</span>
+            <span className="px-3 py-1.5 rounded text-xs font-semibold text-[var(--primary-700)] border-b-2 border-[var(--primary-600)] bg-[var(--primary-50)]">Active tab</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 const EST_TABS = [
   {id:"setup",    label:"⚙️ Investment Setup"},
   {id:"estimate", label:"📐 Estimation"},
@@ -9967,6 +10033,16 @@ class ErrorBoundary extends Component {
 export default function App() {
   const [appTab,      setAppTab]      = useState("hub");
   const [estTab,      setEstTab]      = useState("estimate");
+
+  // Theme — persisted in localStorage, applied to <html data-theme="...">
+  const [theme, setTheme] = useState(() => {
+    try { return localStorage.getItem("iet_theme") || "ee"; } catch { return "ee"; }
+  });
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    try { localStorage.setItem("iet_theme", theme); } catch(e) {}
+  }, [theme]);
+
   const [inv,         setInv]         = useState(defaultInv);
   const [lines,       setLines]       = useState({});
   // Commercial rates only apply to Commercially Funded investments
@@ -10285,25 +10361,25 @@ export default function App() {
       <div className="flex flex-col h-screen font-sans text-sm select-none">
 
         {/* Top nav */}
-        <div className="bg-blue-900 text-white px-4 py-0 flex items-center gap-0 flex-shrink-0 shadow-lg">
+        <div className="bg-[var(--primary-900)] text-white px-4 py-0 flex items-center gap-0 flex-shrink-0 shadow-lg">
           <div className="flex items-center gap-2 mr-5 py-3">
             <span className="text-orange-400 text-lg">⚡</span>
             <span className="font-bold text-sm tracking-wide">IET Demo</span>
-            <span className="text-blue-500 text-xs">|</span>
-            <span className="text-blue-300 text-xs truncate max-w-48">{inv.name}</span>
+            <span className="text-[var(--primary-500)] text-xs">|</span>
+            <span className="text-[var(--primary-300)] text-xs truncate max-w-48">{inv.name}</span>
           </div>
           {APP_TABS.map(tab=>(
             <button key={tab.id} onClick={()=>setAppTab(tab.id)}
               className={`px-5 py-3 text-xs font-semibold transition-colors border-b-2 ${
-                appTab===tab.id?"border-orange-400 text-white bg-blue-800":"border-transparent text-blue-300 hover:text-white hover:bg-blue-800"}`}>
+                appTab===tab.id?"border-orange-400 text-white bg-[var(--primary-800)]":"border-transparent text-[var(--primary-300)] hover:text-white hover:bg-[var(--primary-800)]"}`}>
               {tab.label}
-              {tab.id==="saved"&&<span className="ml-1 text-xs bg-blue-700 text-blue-200 px-1.5 py-0.5 rounded-full font-mono">
+              {tab.id==="saved"&&<span className="ml-1 text-xs bg-[var(--primary-700)] text-[var(--primary-200)] px-1.5 py-0.5 rounded-full font-mono">
                 {(()=>{try{return JSON.parse(localStorage.getItem("iet_investments")||"[]").length}catch{return 0}})()}
               </span>}
             </button>
           ))}
           <div className="flex-1"/>
-          {loading&&<span className="text-xs text-blue-300 animate-pulse pr-4">⟳ Loading live data…</span>}
+          {loading&&<span className="text-xs text-[var(--primary-300)] animate-pulse pr-4">⟳ Loading live data…</span>}
           {!loading&&!error&&<span className="text-xs text-green-400 pr-4">✓ {wbsData.length} WBS · {supplyData.length} items · {equipData.length} equipment · {ratesData.length} rates</span>}
           {error&&<span className="text-xs text-red-400 pr-4">⚠ Data error — {error}</span>}
         </div>
@@ -10404,7 +10480,7 @@ export default function App() {
                 {EST_TABS.map(tab=>(
                   <button key={tab.id} onClick={()=>setEstTab(tab.id)}
                     className={`relative px-4 py-2.5 text-xs font-semibold transition-colors border-b-2 mr-1 -mb-px ${
-                      estTab===tab.id?"border-blue-600 text-blue-700 bg-blue-50":"border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}>
+                      estTab===tab.id?"border-[var(--primary-600)] text-[var(--primary-700)] bg-[var(--primary-50)]":"border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"}`}>
                     {tab.label}
                     {tab.id==="review"&&linesEntered>0&&(
                       <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">{linesEntered}</span>
@@ -10416,12 +10492,12 @@ export default function App() {
                 ))}
                 <div className="flex-1"/>
                 <div className="flex items-center gap-3 pb-1">
-                  <span className={`text-xs font-semibold ${isCommercial?"text-orange-600":"text-blue-600"}`}>
+                  <span className={`text-xs font-semibold ${isCommercial?"text-orange-600":"text-[var(--primary-600)]"}`}>
                     {isCommercial?"Commercial + ANS Rates":"EE Internal Rates only"}
                   </span>
                   <span className="text-xs text-gray-400">{inv.estimatedBy}</span>
                   <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                    inv.type==="Commercially Funded"?"bg-orange-100 text-orange-700":"bg-blue-100 text-blue-700"}`}>
+                    inv.type==="Commercially Funded"?"bg-orange-100 text-orange-700":"bg-[var(--primary-100)] text-[var(--primary-700)]"}`}>
                     {inv.type==="Commercially Funded"?"COMMERCIAL":"INTERNAL"}
                   </span>
                 </div>
@@ -10443,6 +10519,7 @@ export default function App() {
             </>
           )}
           {appTab==="wbsmanager" && <WBSManager equipSel={equipSel} setEquipSel={setEquipSel} onPriceUpdate={handlePriceUpdate}/>}
+          {appTab==="settings"   && <ThemeSettings theme={theme} onChange={setTheme}/>}
           {appTab==="hub"        && <InvestmentHub
             onLoad={(s)=>{loadInvestment(s);}}
             onNew={newEstimate}
