@@ -3793,7 +3793,10 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   const [sortBy,      setSortBy]      = useState("savedAt");
   const [sortDir,     setSortDir]     = useState("desc");
   const [selected,    setSelected]    = useState(null);
-  const [editStatus,  setEditStatus]  = useState(null); // id of investment being status-edited
+  const [editStatus,      setEditStatus]     = useState(null); // id of investment being status-edited
+  const [approveModal,    setApproveModal]   = useState(null); // {id, currentStatus} when PIN modal open
+  const [approvePinVal,   setApprovePinVal]  = useState("");
+  const [approvePinErr,   setApprovePinErr]  = useState(false);
   const [deleteModal, setDeleteModal] = useState(null); // { stage:1|2|3, inv:savedRecord }
   const [deleteRole,  setDeleteRole]  = useState(null); // "Senior Estimator"|"Manager"
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -3816,11 +3819,45 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   };
   useEffect(()=>{ load(); window.addEventListener("focus",load); return ()=>window.removeEventListener("focus",load); },[]);
 
-  const updateStatus = (id, newStatus) => {
+  const APPROVE_PIN = "1607"; // Same manager PIN — in Power Platform this becomes AD role check
+
+  // Commit a status change directly (non-Approve transitions)
+  const commitStatus = (id, newStatus) => {
     const updated = saved.map(s=>s.id===id ? {...s,status:newStatus} : s);
     setSaved(updated);
     localStorage.setItem("iet_investments", JSON.stringify(updated));
     setEditStatus(null);
+  };
+
+  // Route status changes: Approved requires PIN; cannot change away from Approved via dropdown
+  const updateStatus = (id, newStatus, currentStatus) => {
+    if (currentStatus === "Approved") {
+      // Once Approved, status is immutable via dropdown — use Unlock to Amend instead
+      setEditStatus(null);
+      return;
+    }
+    if (newStatus === "Approved") {
+      // Require PIN to set Approved
+      setApprovePinVal("");
+      setApprovePinErr(false);
+      setApproveModal({ id, currentStatus });
+      setEditStatus(null);
+      return;
+    }
+    commitStatus(id, newStatus);
+  };
+
+  const confirmApproval = (id) => {
+    if (approvePinVal === APPROVE_PIN) {
+      commitStatus(id, "Approved");
+      setApproveModal(null);
+      setApprovePinVal("");
+      setApprovePinErr(false);
+    } else {
+      setApprovePinErr(true);
+      setApprovePinVal("");
+      setTimeout(() => setApprovePinErr(false), 1500);
+    }
   };
   const del = (id) => {
     const updated = saved.filter(s=>s.id!==id);
@@ -4156,8 +4193,16 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                         <div className="text-gray-400 font-mono">{s.inv.number} · {s.inv.type==="Commercially Funded"?"Commercial":"Internal"}</div>
                       </td>
                       <td className="px-3 py-2 text-center">
-                        {editStatus===s.id ? (
-                          <select autoFocus value={s.status||"Draft"} onChange={e=>updateStatus(s.id,e.target.value)}
+                        {s.status==="Approved" ? (
+                          /* Approved — immutable badge, no dropdown */
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${sc.bg} ${sc.text}`}
+                            title="Approved — use Unlock to Amend to create a new revision">
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sc.dot}`}/>
+                            {s.status} 🔒
+                          </span>
+                        ) : editStatus===s.id ? (
+                          <select autoFocus value={s.status||"Draft"}
+                            onChange={e=>updateStatus(s.id,e.target.value,s.status||"Draft")}
                             onBlur={()=>setEditStatus(null)}
                             className="text-xs border border-gray-300 rounded px-1 py-0.5 bg-white focus:outline-none">
                             {["Draft","In Review","Approved","On Hold","Rejected"].map(st=><option key={st}>{st}</option>)}
@@ -4345,6 +4390,66 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       )}
       </div>}{/* end portfolio tab */}
 
+      {/* ── APPROVE INVESTMENT MODAL — PIN gated ── */}
+      {approveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.55)"}}>
+          <div className="bg-white rounded-xl shadow-2xl w-[420px] overflow-hidden">
+            <div className="bg-green-800 text-white px-5 py-4">
+              <div className="text-sm font-bold">✅ Approve Estimate</div>
+              <div className="text-xs text-green-200 mt-1">Team Leader PIN required — once approved this record is locked</div>
+            </div>
+            <div className="p-5 space-y-4">
+              {(()=>{
+                const rec = saved.find(s=>s.id===approveModal.id);
+                return rec ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2.5">
+                    <div className="text-sm font-bold text-green-900">{rec.inv?.name||"Unnamed"}</div>
+                    <div className="text-xs text-green-700 font-mono mt-0.5">{rec.inv?.number} · {rec.inv?.estClass} · Rev {rec.inv?.revision||"A"}</div>
+                  </div>
+                ) : null;
+              })()}
+              <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1">
+                <div className="font-semibold mb-1">Once approved:</div>
+                <div>• The estimate is <span className="font-semibold">permanently locked</span> — no field can be edited</div>
+                <div>• The status badge shows 🔒 and cannot be changed via dropdown</div>
+                <div>• Any future changes require <span className="font-semibold">Unlock to Amend</span>, which creates a new revision</div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 block mb-1.5">Team Leader PIN *</label>
+                <input
+                  type="password"
+                  value={approvePinVal}
+                  autoFocus
+                  onChange={e=>{setApprovePinVal(e.target.value);setApprovePinErr(false);}}
+                  onKeyDown={e=>{
+                    if(e.key==="Enter") confirmApproval(approveModal.id);
+                    if(e.key==="Escape"){setApproveModal(null);setApprovePinVal("");}
+                  }}
+                  placeholder="Enter PIN"
+                  className={`w-full border rounded px-3 py-2 text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 transition-colors ${
+                    approvePinErr
+                      ? "border-red-400 ring-red-300 bg-red-50"
+                      : "border-gray-300 focus:ring-green-400"
+                  }`}/>
+                {approvePinErr && (
+                  <div className="text-xs text-red-600 text-center mt-1">Incorrect PIN — try again</div>
+                )}
+              </div>
+            </div>
+            <div className="border-t px-5 py-3 flex gap-2">
+              <button onClick={()=>{setApproveModal(null);setApprovePinVal("");setApprovePinErr(false);}}
+                className="flex-1 text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 py-2 rounded font-semibold">
+                Cancel
+              </button>
+              <button onClick={()=>confirmApproval(approveModal.id)} disabled={!approvePinVal}
+                className="flex-1 text-xs bg-green-700 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white py-2 rounded font-bold">
+                ✅ Confirm Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── DELETE INVESTMENT MODAL — 3-stage role-locked ── */}
       {deleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{background:"rgba(0,0,0,0.55)"}}>
@@ -4449,7 +4554,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                 <label className="text-xs text-gray-500 block mb-1">Initial Status</label>
                 <select value={cloneStatus} onChange={e=>setCloneStatus(e.target.value)}
                   className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-400">
-                  {["Draft","In Review","Approved","On Hold"].map(s=><option key={s}>{s}</option>)}
+                  {["Draft","In Review","On Hold"].map(s=><option key={s}>{s}</option>)}
                 </select>
               </div>
             </div>
