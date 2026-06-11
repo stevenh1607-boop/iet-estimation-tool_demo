@@ -2387,6 +2387,23 @@ function exportSummaryPDF(ctx) {
           </div>
         </label>
       </div>
+      <div style="padding:0 20px 4px;">
+        <div style="font-size:12px;color:#374151;font-weight:600;margin:8px 0 8px;border-top:1px solid #e5e7eb;padding-top:14px;">Report type</div>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;background:#f9fafb;${isCommercial?'':'opacity:0.45;cursor:not-allowed;'}">
+          <input type="radio" name="opt-report-type" id="opt-internal" value="internal" checked style="margin-top:2px;width:14px;height:14px;accent-color:#1e3a5f;">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#111827;">Internal report</div>
+            <div style="font-size:11px;color:#6b7280;margin-top:2px;">Full breakdown including EE Internal costs, ANS margins and the 20% OT line — for internal use only.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;cursor:${isCommercial?'pointer':'not-allowed'};padding:10px;border:1px solid #fed7aa;border-radius:8px;background:#fff7ed;${isCommercial?'':'opacity:0.45;'}">
+          <input type="radio" name="opt-report-type" id="opt-commercial" value="commercial" ${isCommercial?'':'disabled'} style="margin-top:2px;width:14px;height:14px;accent-color:#c2410c;">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:#9a3412;">Commercial report</div>
+            <div style="font-size:11px;color:#c2410c;margin-top:2px;">${isCommercial?'Hides EE Internal costs, ANS margins, OT and Cost* / Admin-Burden columns — shows Commercial / Contract Value figures only. Suitable to share externally.':'Not available — this investment has no commercial pricing.'}</div>
+          </div>
+        </label>
+      </div>
       <div style="padding:0 20px 16px;display:flex;gap:8px;">
         <button id="btn-cancel" style="flex:1;border:1px solid #d1d5db;background:#f9fafb;color:#374151;padding:9px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button>
         <button id="btn-export" style="flex:2;background:#1e3a5f;color:white;padding:9px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;border:none;">Generate PDF</button>
@@ -2401,12 +2418,13 @@ function exportSummaryPDF(ctx) {
     const useCurrentExpand = document.getElementById('opt-wbs-expanded').checked;
     const includeLines     = document.getElementById('opt-line-detail').checked;
     const includeFinancial = document.getElementById('opt-financial').checked;
+    const commercialOnly   = isCommercial && document.getElementById('opt-commercial').checked;
     document.body.removeChild(modalDiv);
     doGeneratePDF({ inv, lines, isCommercial, byPhase, grandEE, grandComm,
       contPct, contAmt, escResult, finalTotal, commGrandHrs, nodeRollup,
       phaseNodes, openNodes, phaseNames, descMap, entered, supply, commTotals,
       commProfiles, ANS_LAB, ANS_MAT, ANS_CON, otCost, grandEEwithOT,
-      useCurrentExpand, includeLines, includeFinancial });
+      useCurrentExpand, includeLines, includeFinancial, commercialOnly });
   };
 }
 
@@ -2420,6 +2438,7 @@ function doGeneratePDF(ctx) {
   } = ctx;
   const otCostVal      = ctx.otCost || 0;
   const grandEEwithOTV = ctx.grandEEwithOT ?? (grandEE + otCostVal);
+  const commercialOnly = !!ctx.commercialOnly && isCommercial; // hide EE Internal $/margins, show Commercial only
 
   const fmt  = (v) => '$' + Math.round(v||0).toLocaleString('en-AU');
   const fmtH = (v) => Math.round(v||0).toLocaleString('en-AU') + ' hrs';
@@ -2443,7 +2462,11 @@ function doGeneratePDF(ctx) {
     const fwBold   = depth<=2 ? 'font-weight:700;' : depth===3 ? 'font-weight:600;' : '';
     const toggle   = (!isLeaf && childCodes.length>0) ? (isOpen?'▾ ':'▸ ') : '  ';
     const desc     = descMap[code] || code;
-    const cols     = isCommercial
+    const cols     = commercialOnly
+      ? `<td style="padding:4px 6px;text-align:right;color:#7c3aed;">${roll.installHrs>0?fmtH(roll.installHrs):'—'}</td>
+         <td style="padding:4px 6px;text-align:right;color:#0f766e;">${code==='4'&&commGrandHrs>0?fmtH(commGrandHrs):'—'}</td>
+         <td style="padding:4px 6px;text-align:right;${fwBold}color:#c2410c;">${fmt(roll.comm)}</td>`
+      : isCommercial
       ? `<td style="padding:4px 6px;text-align:right;color:#7c3aed;">${roll.installHrs>0?fmtH(roll.installHrs):'—'}</td>
          <td style="padding:4px 6px;text-align:right;color:#0f766e;">${code==='4'&&commGrandHrs>0?fmtH(commGrandHrs):'—'}</td>
          <td style="padding:4px 6px;text-align:right;${fwBold}color:#1e40af;">${fmt(roll.eeInt)}</td>
@@ -2471,14 +2494,20 @@ function doGeneratePDF(ctx) {
     <div style="border:1px solid #e5e7eb;border-radius:6px;padding:10px;text-align:center;flex:1;min-width:100px;">
       <div style="font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px;">Phase ${ph} — ${phaseNames[ph]||ph}</div>
       ${ph==='4'?'<div style="font-size:9px;color:#0f766e;">auto-derived</div>':''}
-      <div style="font-size:13px;font-weight:700;color:#1e40af;">${fmt(p.eeInt)}</div>
-      ${isCommercial?`<div style="font-size:11px;font-weight:700;color:#c2410c;">${fmt(p.comm)}</div>`:''}
+      ${commercialOnly
+        ? `<div style="font-size:13px;font-weight:700;color:#c2410c;">${fmt(p.comm)}</div>`
+        : `<div style="font-size:13px;font-weight:700;color:#1e40af;">${fmt(p.eeInt)}</div>
+           ${isCommercial?`<div style="font-size:11px;font-weight:700;color:#c2410c;">${fmt(p.comm)}</div>`:''}`}
       ${p.installHrs>0?`<div style="font-size:9px;color:#7c3aed;margin-top:2px;">${fmtH(p.installHrs)} install</div>`:''}
       ${ph==='4'&&p.commHrs>0?`<div style="font-size:9px;color:#0f766e;">${fmtH(p.commHrs)} comm</div>`:''}
     </div>`).join('');
 
   // ── WBS column headers ────────────────────────────────────────────
-  const wbsColHdrs = isCommercial
+  const wbsColHdrs = commercialOnly
+    ? `<th style="text-align:right;width:80px;color:#7c3aed;">Install Hrs</th>
+       <th style="text-align:right;width:80px;color:#0f766e;">Comm Hrs</th>
+       <th style="text-align:right;width:90px;color:#c2410c;">Commercial</th>`
+    : isCommercial
     ? `<th style="text-align:right;width:80px;color:#7c3aed;">Install Hrs</th>
        <th style="text-align:right;width:80px;color:#0f766e;">Comm Hrs</th>
        <th style="text-align:right;width:90px;color:#1d4ed8;">EE Internal</th>
@@ -2489,7 +2518,11 @@ function doGeneratePDF(ctx) {
 
   // ── Grand total footer ─────────────────────────────────────────────
   const totalInstHrs = Object.entries(nodeRollup).filter(([k])=>k.split('.').length===1).reduce((a,[,v])=>a+v.installHrs,0);
-  const wbsFooterCols = isCommercial
+  const wbsFooterCols = commercialOnly
+    ? `<td style="text-align:right;padding:6px;">${totalInstHrs>0?fmtH(totalInstHrs):'—'}</td>
+       <td style="text-align:right;padding:6px;">${commGrandHrs>0?fmtH(commGrandHrs):'—'}</td>
+       <td style="text-align:right;padding:6px;font-weight:700;color:#c2410c;">${fmt(grandComm)}</td>`
+    : isCommercial
     ? `<td style="text-align:right;padding:6px;">${totalInstHrs>0?fmtH(totalInstHrs):'—'}</td>
        <td style="text-align:right;padding:6px;">${commGrandHrs>0?fmtH(commGrandHrs):'—'}</td>
        <td style="text-align:right;padding:6px;font-weight:700;color:#1e40af;">${fmt(grandEE)}</td>
@@ -2573,9 +2606,33 @@ function doGeneratePDF(ctx) {
         <td style="padding:5px 8px;text-align:right;font-size:10px;font-weight:600;">${total!==null?fmt(total):''}</td>
       </tr>`;
 
+    const finRowComm=(label,total,bold)=>`
+      <tr style="border-bottom:1px solid #e5e7eb;${bold?'font-weight:700;background:#f8fafc;':''}">
+        <td style="padding:5px 8px;font-size:10px;">${label}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:10px;font-weight:600;">${fmt(total)}</td>
+      </tr>`;
+
     financialSection = `
       <div style="page-break-before:always;"></div>
       <h2 style="font-size:13px;color:#1e3a5f;margin:0 0 8px;">Financial Report</h2>
+      ${commercialOnly ? `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
+        <thead>
+          <tr style="background:#1e3a5f;color:white;">
+            <th style="padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;">Category</th>
+            <th style="padding:6px 8px;text-align:right;font-size:9px;text-transform:uppercase;">Contract Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${finRowComm('Sub-Contract (Contractor Delivered)',subCost+subANS,false)}
+          ${finRowComm('Materials (PCE/Equipment)',matCost+matANS,false)}
+          ${finRowComm('EE Internal Works',eeCost+eeANS,false)}
+          ${finRowComm('Contingency ('+parseFloat(inv.contingency||'0')+'%)',cont,false)}
+          ${finRowComm('Contract Value (excl. GST)',cv,true)}
+          ${finRowComm('GST (10%)',gst,false)}
+          ${finRowComm('Contract Value (incl. GST)',gstInc,true)}
+        </tbody>
+      </table>` : `
       <table style="width:100%;border-collapse:collapse;margin-bottom:16px;">
         <thead>
           <tr style="background:#1e3a5f;color:white;">
@@ -2607,7 +2664,7 @@ function doGeneratePDF(ctx) {
           <tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:4px 8px;font-size:10px;">Direct Spend (Cost*)</td><td style="padding:4px 8px;text-align:right;font-size:10px;font-weight:600;">${fmt(totalCost)}</td></tr>
           <tr style="border-bottom:1px solid #e5e7eb;background:#f8fafc;"><td style="padding:4px 8px;font-size:10px;">Direct Spend incl. Overheads (×1.866)</td><td style="padding:4px 8px;text-align:right;font-size:10px;font-weight:700;color:#1e40af;">${fmt(eeOH)}</td></tr>
         </tbody>
-      </table>
+      </table>`}
       <h3 style="font-size:11px;color:#1e3a5f;margin:12px 0 6px;">PA Breakdown (indicative)</h3>
       <table style="width:100%;border-collapse:collapse;margin-bottom:12px;">
         <thead><tr style="background:#374151;color:white;">
@@ -2691,9 +2748,11 @@ function doGeneratePDF(ctx) {
 
   <!-- Financial totals -->
   <div class="total-band">
-    <div class="total-box"><div class="total-label">EE Internal Total</div><div class="total-value">${fmt(grandEEwithOTV)}</div></div>
-    ${isCommercial?`<div class="total-box orange"><div class="total-label">Commercial Total</div><div class="total-value">${fmt(grandComm)}</div></div>`:''}
-    ${grandComm>grandEE?`<div class="total-box gray"><div class="total-label">ANS Uplift</div><div class="total-value">${fmt(grandComm-grandEE)}</div></div>`:''}
+    ${commercialOnly
+      ? `<div class="total-box orange"><div class="total-label">Commercial Total</div><div class="total-value">${fmt(grandComm)}</div></div>`
+      : `<div class="total-box"><div class="total-label">EE Internal Total</div><div class="total-value">${fmt(grandEEwithOTV)}</div></div>
+         ${isCommercial?`<div class="total-box orange"><div class="total-label">Commercial Total</div><div class="total-value">${fmt(grandComm)}</div></div>`:''}
+         ${grandComm>grandEE?`<div class="total-box gray"><div class="total-label">ANS Uplift</div><div class="total-value">${fmt(grandComm-grandEE)}</div></div>`:''}`}
   </div>
 
   <!-- WBS Cost Tree -->
@@ -2715,33 +2774,33 @@ function doGeneratePDF(ctx) {
   <!-- Contingency + Escalation + Final Total -->
   <table>
     <tbody>
-      ${otCostVal>0?`
+      ${(otCostVal>0 && !commercialOnly)?`
       <tr class="cont-row" style="background:#fffbeb;"><td style="padding:5px 8px;font-size:10px;color:#92400e;">Cost of 20% OT for Internal Resources</td>
         <td style="padding:5px 8px;text-align:right;color:#92400e;font-weight:600;">${fmt(otCostVal)}</td>
         ${isCommercial?`<td style="padding:5px 8px;text-align:right;color:#d97706;">—</td>`:''}
       </tr>`:''}
       <tr class="cont-row"><td style="padding:5px 8px;font-size:10px;">Base Estimate (excl. contingency &amp; escalation)</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#1e40af;">${fmt(grandEEwithOTV)}</td>
-        ${isCommercial?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#c2410c;">${fmt(grandComm)}</td>`:''}
+        ${commercialOnly?'':`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#1e40af;">${fmt(grandEEwithOTV)}</td>`}
+        ${(isCommercial)?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#c2410c;">${fmt(grandComm)}</td>`:''}
       </tr>
       <tr class="cont-row"><td style="padding:5px 8px;font-size:10px;">Contingency (${contPct}%)</td>
-        <td style="padding:5px 8px;text-align:right;">${fmt(contAmt*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>
+        ${commercialOnly?'':`<td style="padding:5px 8px;text-align:right;">${fmt(contAmt*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>`}
         ${isCommercial?`<td style="padding:5px 8px;text-align:right;">${fmt(contAmt)}</td>`:''}
       </tr>
       ${escResult.escTotal>0?`
       <tr class="esc-row"><td style="padding:5px 8px;font-size:10px;">📈 Escalation (weighted avg)</td>
-        <td style="padding:5px 8px;text-align:right;color:#0f766e;font-weight:600;">${fmt(escResult.escTotal)}</td>
+        ${commercialOnly?'':`<td style="padding:5px 8px;text-align:right;color:#0f766e;font-weight:600;">${fmt(escResult.escTotal)}</td>`}
         ${isCommercial?`<td style="padding:5px 8px;text-align:right;color:#0f766e;font-weight:600;">${fmt(escResult.escComm)}</td>`:''}
       </tr>`:''}
       <tr class="final-row">
         <td>TOTAL — Base + Contingency + Escalation &nbsp;·&nbsp; ${inv.estClass} Rev ${inv.revision||'A'}</td>
-        <td style="text-align:right;">${fmt(finalTotal*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>
+        ${commercialOnly?'':`<td style="text-align:right;">${fmt(finalTotal*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>`}
         ${isCommercial?`<td style="text-align:right;color:#fed7aa;">${fmt(finalTotal)}</td>`:''}
       </tr>
     </tbody>
   </table>
 
-  ${isCommercial&&grandComm>0?`
+  ${(isCommercial&&grandComm>0&&!commercialOnly)?`
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:8px 12px;font-size:10px;color:#92400e;margin-bottom:12px;">
     <strong>ANS Margins:</strong> Labour ×${((ANS_LAB)*100).toFixed(0)}% &nbsp;·&nbsp;
     Materials ×${((ANS_MAT)*100).toFixed(0)}% &nbsp;·&nbsp;
