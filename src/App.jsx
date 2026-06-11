@@ -532,7 +532,7 @@ function calcLine(item, qty, factor, delivery, installHrsOvrd, contractorRateOvr
   const wafhaRate  = ratesLookup?.["Work Away From Home"]
     ? (isCommercial
         ? (ratesLookup["Work Away From Home"].ee_commercial_rate || 345.83)
-        : (ratesLookup["Work Away From Home"].ee_internal_rate_ot ?? ratesLookup["Work Away From Home"].ee_internal_rate ?? 359.50))
+        : (ratesLookup["Work Away From Home"].ee_internal_rate   || 359.50))
     : (item.ee_labour_rate || 359.50);
   const eeRate     = isWAFHA ? wafhaRate : (item.ee_labour_rate || 246.95);
   // Percentage-of-total items: cost = pct × total non-prelim base for this L3 group
@@ -1199,7 +1199,7 @@ function EstimationScreen({ isCommercial, lines, setLines }) {
       const resData   = ratesLookup[resName];
       const eeRate    = isCommercial
         ? (resData?.ee_commercial_rate || inst.ee_labour_rate || 246.95)
-        : (resData?.ee_internal_rate_ot ?? resData?.ee_internal_rate ?? inst.ee_labour_rate ?? 246.95);
+        : (resData?.ee_internal_rate   || inst.ee_labour_rate || 246.95);
       const contrRate = parseFloat(instLn.contrRate || "") || inst.contractor_rate || 0;
       // Cost calc
       const eeLabCost   = isContr ? 0 : activeHrs * eeRate;
@@ -2832,9 +2832,24 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
 
   const grandEE   = Object.values(byPhase).reduce((a,p)=>a+p.eeInt,0);
   const grandComm = Object.values(byPhase).reduce((a,p)=>a+p.comm,0);
+
+  // ── 20% OT for Internal Resources ───────────────────────────────
+  // Mirrors the master workbook's "Cost of 20% Overtime for Internal
+  // Resources" line on the Summary-Internal sheet — a single uplift
+  // applied to the EE-delivered internal labour cost (not contractors,
+  // not materials), derived from the Resource Rates "EE Internal +20% OT"
+  // column vs the ordinary "EE Internal" rate.
+  const otRatio = useMemo(()=>{
+    const awd = Object.values(resourceCodes||{}).find(r=>r.erp_code==="AWD" && r.ee_internal_rate_ot && r.ee_internal_rate);
+    return awd ? (awd.ee_internal_rate_ot/awd.ee_internal_rate - 1) : 0;
+  },[resourceCodes]);
+  const grandEELabCost = Object.values(byPhase).reduce((a,p)=>a+(p.eeLabCost||0),0);
+  const otCost   = grandEELabCost * otRatio;
+  const grandEEwithOT = grandEE + otCost;
+
   const contPct   = parseFloat(isCommercial?inv.contComm:inv.contInt)||10;
-  const contAmt   = (isCommercial?grandComm:grandEE)*contPct/100;
-  const totalWithCont = (isCommercial?grandComm:grandEE)+contAmt;
+  const contAmt   = (isCommercial?grandComm:grandEEwithOT)*contPct/100;
+  const totalWithCont = (isCommercial?grandComm:grandEEwithOT)+contAmt;
 
   // ── ESCALATION ──────────────────────────────────────────────────
   // Calculate weighted escalation per phase using project timeline
@@ -2883,7 +2898,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
     };
   },[escRates, byPhase, inv, isCommercial]);
 
-  const finalTotal = (isCommercial ? grandComm : grandEE) + contAmt + (isCommercial ? escResult.escComm : escResult.escTotal);
+  const finalTotal = (isCommercial ? grandComm : grandEEwithOT) + contAmt + (isCommercial ? escResult.escComm : escResult.escTotal);
 
   // Build WBS tree down to L5 for each entered supply item + Phase 4 commission
   const nodeRollup = useMemo(()=>{
@@ -3070,17 +3085,28 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
         {/* Contingency + Escalation + Grand Total */}
         {grandEE>0 && (
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            {/* 20% OT for internal resources */}
+            {otCost>0 && (
+              <div className="grid text-xs border-b bg-amber-50" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
+                <div className="px-4 py-2 text-amber-800 font-medium flex items-center gap-1.5">
+                  Cost of 20% OT for Internal Resources
+                  <span className="text-amber-500 font-normal" title="Combined 80% Ordinary + 20% Overtime rate vs Ordinary rate, applied to EE-delivered labour cost — see Resource Rates page">ⓘ</span>
+                </div>
+                <div className="py-2 text-right pr-4 text-amber-700 font-semibold">{fmt(otCost)}</div>
+                {isCommercial && <div className="py-2 text-right pr-4 text-amber-400">—</div>}
+              </div>
+            )}
             {/* Contingency row */}
             <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
               <div className="px-4 py-2 text-gray-600 font-medium">Base Estimate (excl. contingency &amp; escalation)</div>
-              <div className="py-2 text-right pr-4 font-bold text-[var(--primary-900)]">{fmt(grandEE)}</div>
+              <div className="py-2 text-right pr-4 font-bold text-[var(--primary-900)]">{fmt(grandEEwithOT)}</div>
               {isCommercial && <div className="py-2 text-right pr-4 font-bold text-orange-800">{fmt(grandComm)}</div>}
             </div>
             <div className="grid text-xs border-b" style={{gridTemplateColumns: isCommercial?"1fr 100px 100px":"1fr 100px"}}>
               <div className="px-4 py-2 text-gray-600">
                 Contingency ({contPct}%)
               </div>
-              <div className="py-2 text-right pr-4 text-[var(--primary-600)] font-medium">{fmt(contAmt * (grandEE/(grandComm||grandEE)))}</div>
+              <div className="py-2 text-right pr-4 text-[var(--primary-600)] font-medium">{fmt(contAmt * (grandEEwithOT/(grandComm||grandEEwithOT)))}</div>
               {isCommercial && <div className="py-2 text-right pr-4 text-orange-600 font-medium">{fmt(contAmt)}</div>}
             </div>
 
@@ -3125,7 +3151,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
                   {inv.name||"Investment"} · {inv.estClass} · Rev {inv.revision}
                 </div>
               </div>
-              <div className="py-3.5 text-right pr-4 text-white text-base">{fmt(finalTotal * (grandEE/(grandComm||grandEE)))}</div>
+              <div className="py-3.5 text-right pr-4 text-white text-base">{fmt(finalTotal * (grandEEwithOT/(grandComm||grandEEwithOT)))}</div>
               {isCommercial && <div className="py-3.5 text-right pr-4 text-orange-300 text-base font-bold">{fmt(finalTotal)}</div>}
             </div>
           </div>
