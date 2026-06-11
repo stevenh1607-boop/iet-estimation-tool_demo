@@ -10027,7 +10027,9 @@ const defaultInv = {
 // costs up to summary WBS rows, grouped by delivery phase.
 // Priority order matters: the FIRST discipline whose prefix matches
 // claims the row (so PROT/CIVIL claim their 3.1.x groups before HV).
-const SME_DISCIPLINES = [
+// The structure below is the DEFAULT — managers can rename, re-scope and
+// reorder disciplines via the Edit Structure dialog (persisted locally).
+const DEFAULT_SME_DISCIPLINES = [
   { id:"SCADA", label:"SCADA & Metering", icon:"📡", color:"teal",
     description:"SCADA RTUs, transducers, load control, system control & metering",
     macroName:"SCADA_Summary",
@@ -10055,8 +10057,29 @@ const SME_DISCIPLINES = [
   { id:"OTHER", label:"Other / Ancillary", icon:"📦", color:"gray",
     description:"Planning, land & routes, ancillary items & handover",
     macroName:"Ancillary_Summary",
-    prefixes:[] },
+    prefixes:[], catchAll:true },
 ];
+
+const SME_STORE_KEY = "iet_sme_disciplines";
+function loadSmeDisciplines() {
+  try {
+    const raw = localStorage.getItem(SME_STORE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length &&
+          parsed.every(d=>d.id && d.label && Array.isArray(d.prefixes))) {
+        // Catch-all must exist and sit last so it only claims unmatched rows
+        const real  = parsed.filter(d=>!d.catchAll);
+        const other = parsed.find(d=>d.catchAll) || DEFAULT_SME_DISCIPLINES.find(d=>d.catchAll);
+        return [...real, other];
+      }
+    }
+  } catch { /* fall through to defaults */ }
+  return DEFAULT_SME_DISCIPLINES;
+}
+function saveSmeDisciplines(discs) {
+  try { localStorage.setItem(SME_STORE_KEY, JSON.stringify(discs)); } catch { /* ignore */ }
+}
 
 const SME_COLOR = {
   teal:   { card:"bg-teal-700",   active:"bg-teal-800 text-white",   hover:"hover:bg-teal-50"   },
@@ -10077,18 +10100,205 @@ const SME_PHASE_STYLES = {
   Handover:      { bg:"bg-green-50",  border:"border-l-green-400",  label:"bg-green-100 text-green-700",   bar:"bg-green-400"  },
 };
 
-function smeClassify(code) {
-  for (const d of SME_DISCIPLINES) {
+function smeClassify(code, discs) {
+  let fallback = null;
+  for (const d of discs) {
+    if (d.catchAll) { fallback = d.id; continue; }
     if (d.prefixes.some(p => code === p || code.startsWith(p + "."))) return d.id;
   }
-  return "OTHER";
+  return fallback || discs[discs.length-1].id;
 }
 function smePhase(code) {
   return { "1":"Planning", "2":"Design", "3":"Construction", "4":"Commissioning", "5":"Handover" }[code.split(".")[0]] || "Construction";
 }
 
+// ── SME STRUCTURE EDITOR ─────────────────────────────────────────
+// Manager-only (PIN 1607, same as rates/scaling editors). Rename,
+// re-scope, reorder, add or remove disciplines. Order = priority:
+// the first discipline whose prefix matches a WBS code claims it.
+function SMEStructureEditor({ discs, allCodes, onSave, onClose }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const [pin, setPin]           = useState("");
+  const [pinErr, setPinErr]     = useState(false);
+  const [draft, setDraft]       = useState(()=>JSON.parse(JSON.stringify(discs)));
+  const [newPrefix, setNewPrefix] = useState({});
+  const pinRef = useRef(null);
+  useEffect(()=>{ if(!unlocked) pinRef.current?.focus(); },[unlocked]);
+
+  const tryPin = ()=>{
+    if (pin==="1607") setUnlocked(true);
+    else { setPinErr(true); setPin(""); setTimeout(()=>setPinErr(false),1500); }
+  };
+
+  // Live match counts against the current draft (priority order applied)
+  const matchCounts = useMemo(()=>{
+    const counts = {};
+    draft.forEach(d=>{ counts[d.id]=0; });
+    allCodes.forEach(code=>{
+      let claimed = false;
+      for (const d of draft) {
+        if (d.catchAll) continue;
+        if (d.prefixes.some(p=>code===p||code.startsWith(p+"."))) { counts[d.id]++; claimed=true; break; }
+      }
+      if (!claimed) { const ca = draft.find(d=>d.catchAll); if (ca) counts[ca.id]++; }
+    });
+    return counts;
+  },[draft, allCodes]);
+
+  const upd = (i,k,v) => setDraft(dr=>dr.map((d,j)=>j===i?{...d,[k]:v}:d));
+  const move = (i,dir) => setDraft(dr=>{
+    const j = i+dir;
+    if (j<0 || j>=dr.length || dr[i].catchAll || dr[j].catchAll) return dr;
+    const next = [...dr]; [next[i],next[j]]=[next[j],next[i]]; return next;
+  });
+  const removeDisc = i => setDraft(dr=>dr.filter((_,j)=>j!==i));
+  const addPrefix = i => {
+    const id = draft[i].id;
+    const v  = (newPrefix[id]||"").trim();
+    if (!v) return;
+    if (!/^[0-9]+(\.[0-9A-Za-z]+)*$/.test(v)) { alert("Prefix must be a WBS code prefix like 3.1.3 or 4.1.2.15"); return; }
+    if (draft[i].prefixes.includes(v)) { setNewPrefix(p=>({...p,[id]:""})); return; }
+    setDraft(dr=>dr.map((d,j)=>j===i?{...d,prefixes:[...d.prefixes,v].sort()}:d));
+    setNewPrefix(p=>({...p,[id]:""}));
+  };
+  const removePrefix = (i,pfx) => setDraft(dr=>dr.map((d,j)=>j===i?{...d,prefixes:d.prefixes.filter(p=>p!==pfx)}:d));
+  const addDisc = () => setDraft(dr=>{
+    const idx = dr.findIndex(d=>d.catchAll);
+    const nd = { id:"CUSTOM_"+Date.now().toString(36), label:"New Discipline", icon:"🧩", color:"gray",
+                 description:"", macroName:"Custom_Summary", prefixes:[] };
+    const next = [...dr];
+    next.splice(idx===-1?next.length:idx, 0, nd);
+    return next;
+  });
+  const resetDefaults = () => {
+    if (window.confirm("Reset SME report structure to the workbook defaults? Your custom disciplines and prefixes will be discarded.")) {
+      setDraft(JSON.parse(JSON.stringify(DEFAULT_SME_DISCIPLINES)));
+    }
+  };
+  const trySave = () => {
+    if (draft.some(d=>!d.label.trim())) { alert("Every discipline needs a name"); return; }
+    const empty = draft.filter(d=>!d.catchAll && d.prefixes.length===0);
+    if (empty.length && !window.confirm(`${empty.map(d=>d.label).join(", ")} ${empty.length===1?"has":"have"} no WBS prefixes and will never match any rows. Save anyway?`)) return;
+    onSave(draft);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-[780px] max-h-[88vh] flex flex-col" onClick={e=>e.stopPropagation()}>
+        <div className="bg-[var(--primary-900)] text-white px-5 py-4 rounded-t-xl flex items-center justify-between flex-shrink-0">
+          <div>
+            <div className="font-bold text-base">✏️ Edit SME Report Structure</div>
+            <div className="text-[var(--primary-200)] text-xs mt-1">
+              {unlocked
+                ? "Order = priority — the first discipline whose prefix matches a WBS code claims the row"
+                : "Manager access required to edit discipline structures"}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-[var(--primary-200)] hover:text-white text-lg leading-none">✕</button>
+        </div>
+
+        {!unlocked ? (
+          <div className="p-8 max-w-sm mx-auto w-full">
+            <div className="text-xs text-gray-500 text-center mb-3">Enter the manager PIN to edit how WBS codes map to SME disciplines</div>
+            <input ref={pinRef} type="password" value={pin}
+              onChange={e=>{setPin(e.target.value);setPinErr(false);}}
+              onKeyDown={e=>{ if(e.key==="Enter") tryPin(); if(e.key==="Escape") onClose(); }}
+              placeholder="Manager PIN"
+              className={`w-full border rounded px-3 py-2 text-sm text-center tracking-widest font-mono focus:outline-none focus:ring-2 ${pinErr?"border-red-400 ring-red-300 bg-red-50":"border-gray-300 focus:ring-[var(--primary-400)]"}`}/>
+            {pinErr && <div className="text-xs text-red-600 text-center mt-2">Incorrect PIN — try again</div>}
+            <button onClick={tryPin} disabled={!pin}
+              className="w-full mt-3 text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] disabled:bg-gray-200 disabled:text-gray-400 text-white py-2 rounded font-bold">
+              🔓 Unlock Editor
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
+              {draft.map((d,i)=>(
+                <div key={d.id} className={`bg-white rounded-lg border p-3 ${d.catchAll?"border-dashed border-gray-300":"border-gray-200 shadow-sm"}`}>
+                  <div className="flex items-center gap-2">
+                    <div className="flex flex-col">
+                      <button onClick={()=>move(i,-1)} disabled={d.catchAll||i===0}
+                        className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none">▲</button>
+                      <button onClick={()=>move(i,1)} disabled={d.catchAll||i>=draft.length-2}
+                        className="text-xs text-gray-400 hover:text-gray-700 disabled:opacity-20 leading-none">▼</button>
+                    </div>
+                    <input value={d.icon} onChange={e=>upd(i,"icon",e.target.value)} maxLength={4}
+                      className="w-12 border border-gray-200 rounded px-1 py-1 text-center text-base focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
+                    <input value={d.label} onChange={e=>upd(i,"label",e.target.value)}
+                      placeholder="Discipline name"
+                      className="flex-1 border border-gray-200 rounded px-2 py-1.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
+                    <select value={d.color} onChange={e=>upd(i,"color",e.target.value)}
+                      className="border border-gray-200 rounded px-1 py-1.5 text-xs focus:outline-none">
+                      {Object.keys(SME_COLOR).map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <span className="text-xs font-mono bg-gray-100 text-gray-600 px-2 py-1 rounded whitespace-nowrap"
+                      title="WBS codes (supply + commissioning) this discipline currently claims">
+                      {matchCounts[d.id]??0} codes
+                    </span>
+                    {!d.catchAll && (
+                      <button onClick={()=>removeDisc(i)} title="Remove discipline"
+                        className="text-gray-300 hover:text-red-600 text-sm px-1">✕</button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 mt-2">
+                    <input value={d.description} onChange={e=>upd(i,"description",e.target.value)}
+                      placeholder="Short description"
+                      className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
+                    <input value={d.macroName} onChange={e=>upd(i,"macroName",e.target.value)}
+                      placeholder="Workbook macro name"
+                      className="w-56 border border-gray-200 rounded px-2 py-1 text-xs font-mono text-gray-600 focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)]"/>
+                  </div>
+                  {d.catchAll ? (
+                    <div className="mt-2 text-xs text-gray-400 italic">
+                      Catch-all — automatically claims every WBS code not matched by a discipline above. Always last; cannot be removed.
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {d.prefixes.map(p=>(
+                        <span key={p} className="inline-flex items-center gap-1 bg-[var(--primary-50)] text-[var(--primary-800)] border border-[var(--primary-200)] rounded px-1.5 py-0.5 text-xs font-mono">
+                          {p}
+                          <button onClick={()=>removePrefix(i,p)} className="text-[var(--primary-400)] hover:text-red-600 leading-none">×</button>
+                        </span>
+                      ))}
+                      <input value={newPrefix[d.id]||""}
+                        onChange={e=>setNewPrefix(np=>({...np,[d.id]:e.target.value}))}
+                        onKeyDown={e=>{ if(e.key==="Enter") addPrefix(i); }}
+                        placeholder="+ add WBS prefix"
+                        className="w-32 border border-dashed border-gray-300 rounded px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-[var(--primary-400)] focus:border-solid"/>
+                      {(newPrefix[d.id]||"").trim() && (
+                        <button onClick={()=>addPrefix(i)}
+                          className="text-xs bg-[var(--primary-700)] hover:bg-[var(--primary-600)] text-white px-2 py-0.5 rounded font-semibold">Add</button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+              <button onClick={addDisc}
+                className="w-full text-xs border-2 border-dashed border-gray-300 hover:border-[var(--primary-400)] hover:text-[var(--primary-700)] text-gray-400 py-2.5 rounded-lg font-semibold">
+                ＋ Add Discipline
+              </button>
+            </div>
+
+            <div className="px-4 py-3 border-t bg-white rounded-b-xl flex items-center gap-2 flex-shrink-0">
+              <button onClick={resetDefaults}
+                className="text-xs text-gray-500 hover:text-red-600 underline mr-auto">↺ Reset to workbook defaults</button>
+              <button onClick={onClose}
+                className="text-xs border border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded font-semibold">Cancel</button>
+              <button onClick={trySave}
+                className="text-xs bg-green-700 hover:bg-green-600 text-white px-4 py-2 rounded font-bold">💾 Save Structure</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SMEReportScreen({ inv, lines, isCommercial }) {
   const { supply, commLookup, commProfiles } = useData();
+  const [discs, setDiscs]                   = useState(loadSmeDisciplines);
+  const [showEditor, setShowEditor]         = useState(false);
   const [selected, setSelected]             = useState("HV");
   const [expandedPhases, setExpandedPhases] = useState({Planning:true,Design:true,Construction:true,Commissioning:true,Handover:true});
   const [showMacroHint, setShowMacroHint]   = useState(false);
@@ -10103,7 +10313,7 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
       if (!ln || parseFloat(ln.qty||"0")<=0) return;
       const c = calcLine(item, ln.qty||"", ln.factor||"1", ln.delivery, ln.instHrsOvrd, ln.contrRate, ln.plant, ln.mats, isCommercial, ln.resourceOvrd, null, 0);
       out.push({ wbs:item.wbs_code, desc:item.description, qty:c.q,
-        phase:smePhase(item.wbs_code), disc:smeClassify(item.wbs_code),
+        phase:smePhase(item.wbs_code), disc:smeClassify(item.wbs_code, discs),
         supplyCost:c.equipCost, installHrs:c.installHrs, commHrs:0, eeInt:c.eeInt, comm:c.comm });
     });
     // Phase 4 commissioning rows — same derivation as Review Lines
@@ -10129,22 +10339,22 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
       const rate    = data.ee_labour_rate||139.26;
       const eeInt   = commHrs*rate;
       out.push({ wbs:commWbs, desc:data.description, qty:derivedQty,
-        phase:"Commissioning", disc:smeClassify(commWbs),
+        phase:"Commissioning", disc:smeClassify(commWbs, discs),
         supplyCost:0, installHrs:0, commHrs, eeInt, comm:eeInt*(1+ANS_LAB) });
     });
     return out;
-  },[supply, lines, isCommercial, commLookup, commProfiles]);
+  },[supply, lines, isCommercial, commLookup, commProfiles, discs]);
 
   const investEETotal = useMemo(()=>allRows.reduce((a,r)=>a+r.eeInt,0),[allRows]);
 
   const discTotals = useMemo(()=>{
     const t = {};
-    SME_DISCIPLINES.forEach(d=>{ t[d.id]={eeInt:0,count:0}; });
-    allRows.forEach(r=>{ t[r.disc].eeInt+=r.eeInt; t[r.disc].count++; });
+    discs.forEach(d=>{ t[d.id]={eeInt:0,count:0}; });
+    allRows.forEach(r=>{ if(!t[r.disc]) t[r.disc]={eeInt:0,count:0}; t[r.disc].eeInt+=r.eeInt; t[r.disc].count++; });
     return t;
-  },[allRows]);
+  },[allRows, discs]);
 
-  const discipline = SME_DISCIPLINES.find(d=>d.id===selected);
+  const discipline = discs.find(d=>d.id===selected) || discs[0];
   const rows = useMemo(()=>
     allRows.filter(r=>r.disc===selected)
       .sort((a,b)=>a.wbs.localeCompare(b.wbs,undefined,{numeric:true})),
@@ -10175,6 +10385,18 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
   }),[rows]);
 
   const sharePct = investEETotal>0 ? ((grandTotal.eeInt/investEETotal)*100).toFixed(1) : "0.0";
+
+  const allCodes = useMemo(()=>[
+    ...supply.map(s=>s.wbs_code),
+    ...Object.keys(commLookup),
+  ],[supply, commLookup]);
+
+  const saveStructure = (next)=>{
+    setDiscs(next);
+    saveSmeDisciplines(next);
+    if (!next.find(d=>d.id===selected)) setSelected(next[0].id);
+    setShowEditor(false);
+  };
   const togglePhase = ph => setExpandedPhases(prev=>({...prev,[ph]:!prev[ph]}));
   const cc = SME_COLOR[discipline.color];
   const gridCols = "150px 1fr 60px 95px 80px 80px 105px 110px";
@@ -10234,11 +10456,11 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
         </div>
 
         <div className="flex-1 py-2 px-2 space-y-1">
-          {SME_DISCIPLINES.map(d=>{
-            const active = d.id===selected;
+          {discs.map(d=>{
+            const active = d.id===discipline.id;
             const dcc    = SME_COLOR[d.color];
             const dt     = discTotals[d.id];
-            if (d.id==="OTHER" && dt.count===0) return null;
+            if (d.catchAll && dt.count===0) return null;
             return (
               <button key={d.id} onClick={()=>setSelected(d.id)}
                 className={`w-full text-left px-3 py-2.5 rounded-lg border transition-all ${
@@ -10261,6 +10483,10 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
         </div>
 
         <div className="p-3 border-t bg-gray-50">
+          <button onClick={()=>setShowEditor(true)}
+            className="w-full text-xs border border-gray-300 hover:border-[var(--primary-400)] hover:text-[var(--primary-700)] text-gray-600 bg-white px-3 py-1.5 rounded font-semibold mb-2">
+            ✏️ Edit Structure
+          </button>
           <button onClick={()=>setShowMacroHint(h=>!h)} className="text-xs text-[var(--primary-700)] hover:underline w-full text-left">
             {showMacroHint?"▾":"▸"} About SME reports
           </button>
@@ -10494,6 +10720,11 @@ function SMEReportScreen({ inv, lines, isCommercial }) {
           </div>
         </div>
       </div>
+
+      {showEditor && (
+        <SMEStructureEditor discs={discs} allCodes={allCodes}
+          onSave={saveStructure} onClose={()=>setShowEditor(false)}/>
+      )}
     </div>
   );
 }
