@@ -2349,6 +2349,7 @@ function exportSummaryPDF(ctx) {
     contPct, contAmt, escResult, finalTotal, commGrandHrs,
     nodeRollup, phaseNodes, openNodes, phaseNames, descMap, entered,
     supply, commTotals, commProfiles, ANS_LAB, ANS_MAT, ANS_CON,
+    otCost, grandEEwithOT,
   } = ctx;
 
   // ── Modal for options ──────────────────────────────────────────
@@ -2404,7 +2405,7 @@ function exportSummaryPDF(ctx) {
     doGeneratePDF({ inv, lines, isCommercial, byPhase, grandEE, grandComm,
       contPct, contAmt, escResult, finalTotal, commGrandHrs, nodeRollup,
       phaseNodes, openNodes, phaseNames, descMap, entered, supply, commTotals,
-      commProfiles, ANS_LAB, ANS_MAT, ANS_CON,
+      commProfiles, ANS_LAB, ANS_MAT, ANS_CON, otCost, grandEEwithOT,
       useCurrentExpand, includeLines, includeFinancial });
   };
 }
@@ -2417,6 +2418,8 @@ function doGeneratePDF(ctx) {
     commProfiles, ANS_LAB, ANS_MAT, ANS_CON,
     useCurrentExpand, includeLines, includeFinancial,
   } = ctx;
+  const otCostVal      = ctx.otCost || 0;
+  const grandEEwithOTV = ctx.grandEEwithOT ?? (grandEE + otCostVal);
 
   const fmt  = (v) => '$' + Math.round(v||0).toLocaleString('en-AU');
   const fmtH = (v) => Math.round(v||0).toLocaleString('en-AU') + ' hrs';
@@ -2688,7 +2691,7 @@ function doGeneratePDF(ctx) {
 
   <!-- Financial totals -->
   <div class="total-band">
-    <div class="total-box"><div class="total-label">EE Internal Total</div><div class="total-value">${fmt(grandEE)}</div></div>
+    <div class="total-box"><div class="total-label">EE Internal Total</div><div class="total-value">${fmt(grandEEwithOTV)}</div></div>
     ${isCommercial?`<div class="total-box orange"><div class="total-label">Commercial Total</div><div class="total-value">${fmt(grandComm)}</div></div>`:''}
     ${grandComm>grandEE?`<div class="total-box gray"><div class="total-label">ANS Uplift</div><div class="total-value">${fmt(grandComm-grandEE)}</div></div>`:''}
   </div>
@@ -2712,12 +2715,17 @@ function doGeneratePDF(ctx) {
   <!-- Contingency + Escalation + Final Total -->
   <table>
     <tbody>
+      ${otCostVal>0?`
+      <tr class="cont-row" style="background:#fffbeb;"><td style="padding:5px 8px;font-size:10px;color:#92400e;">Cost of 20% OT for Internal Resources</td>
+        <td style="padding:5px 8px;text-align:right;color:#92400e;font-weight:600;">${fmt(otCostVal)}</td>
+        ${isCommercial?`<td style="padding:5px 8px;text-align:right;color:#d97706;">—</td>`:''}
+      </tr>`:''}
       <tr class="cont-row"><td style="padding:5px 8px;font-size:10px;">Base Estimate (excl. contingency &amp; escalation)</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#1e40af;">${fmt(grandEE)}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#1e40af;">${fmt(grandEEwithOTV)}</td>
         ${isCommercial?`<td style="padding:5px 8px;text-align:right;font-weight:700;color:#c2410c;">${fmt(grandComm)}</td>`:''}
       </tr>
       <tr class="cont-row"><td style="padding:5px 8px;font-size:10px;">Contingency (${contPct}%)</td>
-        <td style="padding:5px 8px;text-align:right;">${fmt(contAmt*(grandEE/(grandComm||grandEE)))}</td>
+        <td style="padding:5px 8px;text-align:right;">${fmt(contAmt*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>
         ${isCommercial?`<td style="padding:5px 8px;text-align:right;">${fmt(contAmt)}</td>`:''}
       </tr>
       ${escResult.escTotal>0?`
@@ -2727,7 +2735,7 @@ function doGeneratePDF(ctx) {
       </tr>`:''}
       <tr class="final-row">
         <td>TOTAL — Base + Contingency + Escalation &nbsp;·&nbsp; ${inv.estClass} Rev ${inv.revision||'A'}</td>
-        <td style="text-align:right;">${fmt(finalTotal*(grandEE/(grandComm||grandEE)))}</td>
+        <td style="text-align:right;">${fmt(finalTotal*(grandEEwithOTV/(grandComm||grandEEwithOTV)))}</td>
         ${isCommercial?`<td style="text-align:right;color:#fed7aa;">${fmt(finalTotal)}</td>`:''}
       </tr>
     </tbody>
@@ -2738,7 +2746,7 @@ function doGeneratePDF(ctx) {
     <strong>ANS Margins:</strong> Labour ×${((ANS_LAB)*100).toFixed(0)}% &nbsp;·&nbsp;
     Materials ×${((ANS_MAT)*100).toFixed(0)}% &nbsp;·&nbsp;
     Contractor ×${((ANS_CON)*100).toFixed(0)}% &nbsp;·&nbsp;
-    EE Internal base: ${fmt(grandEE)} &nbsp;·&nbsp; Commercial uplift: ${fmt(grandComm-grandEE)}
+    EE Internal base: ${fmt(grandEEwithOTV)} &nbsp;·&nbsp; Commercial uplift: ${fmt(grandComm-grandEEwithOTV)}
   </div>`:''}
 
   ${lineDetailSection}
@@ -3011,7 +3019,7 @@ function SummaryScreen({ inv, lines, isCommercial, equipSel, onSave, lastSaved, 
                 ? <span className="text-xs bg-green-100 text-green-700 border border-green-300 px-3 py-2 rounded font-semibold flex items-center gap-1.5">🔒 Approved — read only</span>
                 : <button onClick={onSave} className="bg-green-700 hover:bg-green-600 text-white text-xs px-4 py-2 rounded font-semibold shadow">💾 Save Investment</button>
               }
-              <button onClick={()=>exportSummaryPDF({inv,lines,isCommercial,byPhase,grandEE,grandComm,contPct,contAmt,escResult,finalTotal,commGrandHrs,nodeRollup,phaseNodes,openNodes,phaseNames,descMap,entered,supply,commTotals,commProfiles,ANS_LAB,ANS_MAT,ANS_CON})}
+              <button onClick={()=>exportSummaryPDF({inv,lines,isCommercial,byPhase,grandEE,grandComm,contPct,contAmt,escResult,finalTotal,commGrandHrs,nodeRollup,phaseNodes,openNodes,phaseNames,descMap,entered,supply,commTotals,commProfiles,ANS_LAB,ANS_MAT,ANS_CON,otCost,grandEEwithOT})}
                 className="bg-indigo-700 hover:bg-indigo-600 text-white text-xs px-4 py-2 rounded font-semibold shadow">
                 📄 Export Summary PDF
               </button>
