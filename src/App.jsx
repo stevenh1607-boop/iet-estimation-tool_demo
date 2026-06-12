@@ -4446,47 +4446,108 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       if (!gi || !de) { setImportError("Workbook doesn't look like an IET estimate — needs 'General Information' and 'Database & Estimate' sheets."); setImportBusy(false); return; }
       const cv = (sheet,addr)=>{ const c=sheet[addr]; return c==null?undefined:c.v; };
       const cs = (sheet,addr)=>{ const v=cv(sheet,addr); return v==null?"":String(v).trim(); };
+      const EC = XL.utils.encode_cell;
 
       // ── General Information → inv ──
+      // Hardened: labels are FOUND, not assumed at fixed rows — older
+      // workbook versions (e.g. v1.1) moved fields between rows.
+      // Scan the first 8 columns × 80 rows for each label; value is the
+      // cell(s) immediately to the right of where the label was found.
+      const giFind = (test) => {
+        for (let r=0; r<80; r++) for (let c=0; c<8; c++) {
+          const v = gi[EC({r,c})]?.v;
+          if (typeof v==="string" && test(v.trim())) return {r,c};
+        }
+        return null;
+      };
+      const giVal = (test, offset=1) => {
+        const p = giFind(test);
+        if (!p) return "";
+        const v = gi[EC({r:p.r, c:p.c+offset})]?.v;
+        return v==null ? "" : String(v).trim();
+      };
+      const giNum = (test, offset=1) => {
+        const p = giFind(test);
+        if (!p) return undefined;
+        const v = gi[EC({r:p.r, c:p.c+offset})]?.v;
+        return typeof v==="number" ? v : undefined;
+      };
+      const eq = s => t => t===s;
+      const starts = s => t => t.toLowerCase().startsWith(s.toLowerCase());
+
       const inv = { ...defaultInv };
-      inv.name        = cs(gi,"D4") || "Imported Estimate";
-      inv.number      = cs(gi,"D5");
-      inv.wacs        = cs(gi,"D6") || "N/A";
-      inv.startMonth  = cs(gi,"D7") || inv.startMonth;
-      inv.startYear   = cs(gi,"E7") || inv.startYear;
-      inv.estimatedBy = cs(gi,"D9") || inv.estimatedBy;
-      inv.reviewedBy  = cs(gi,"D10")==="TBD" ? "" : (cs(gi,"D10")||"");
-      inv.revision    = cs(gi,"D11") || "A";
-      inv.estClass    = cs(gi,"D12") || "Class 5";
-      inv.type        = cs(gi,"D14") || inv.type;
-      inv.complexity  = cs(gi,"D15") || inv.complexity;
-      inv.newTech     = cs(gi,"D16") || inv.newTech;
-      inv.planStart   = cs(gi,"D21")||"1"; inv.planDur   = cs(gi,"E21")||"4";
-      inv.designStart = cs(gi,"D22")||"1"; inv.designDur = cs(gi,"E22")||"9";
-      inv.constrStart = cs(gi,"D23")||"6"; inv.constrDur = cs(gi,"E23")||"15";
-      const ci = cv(gi,"D40"), cc = cv(gi,"D41");
-      if (typeof ci==="number") inv.contInt  = String(Math.round(ci*1000)/10);
-      if (typeof cc==="number") inv.contComm = String(Math.round(cc*1000)/10);
+      inv.name        = giVal(eq("Investment Name:")) || "Imported Estimate";
+      inv.number      = giVal(eq("Investment No.:"));
+      inv.wacs        = giVal(eq("WACS No.:")) || "N/A";
+      inv.startMonth  = giVal(starts("Start Month of the Investment")) || inv.startMonth;
+      inv.startYear   = giVal(starts("Start Month of the Investment"),2) || inv.startYear;
+      inv.estimatedBy = giVal(starts("Estimated By")) || inv.estimatedBy;
+      const rb        = giVal(starts("Reviewed By"));
+      inv.reviewedBy  = rb==="TBD" ? "" : rb;
+      inv.revision    = giVal(eq("Revision:")) || "A";
+      inv.estClass    = giVal(eq("Estimate Class:")) || "Class 5";
+      inv.type        = giVal(eq("Investment Type:")) || inv.type;
+      inv.complexity  = giVal(eq("Investment Complexity:")) || inv.complexity;
+      inv.newTech     = giVal(eq("Use of New Technology:")) || inv.newTech;
+      inv.planStart   = giVal(starts("Planning Phase"))   || "1"; inv.planDur   = giVal(starts("Planning Phase"),2)   || "4";
+      inv.designStart = giVal(starts("Design Phase"))     || "1"; inv.designDur = giVal(starts("Design Phase"),2)     || "9";
+      inv.constrStart = giVal(starts("Construction"))     || "6"; inv.constrDur = giVal(starts("Construction"),2)     || "15";
+      const ci = giNum(starts("Investment Contingency (Internally"));
+      const cc = giNum(starts("Investment Contingency (Commercially"));
+      if (ci!==undefined) inv.contInt  = String(Math.round(ci*1000)/10);
+      if (cc!==undefined) inv.contComm = String(Math.round(cc*1000)/10);
       const ms=[];
-      for (let r=29;r<=38;r++){
-        const stage=cs(gi,"D"+r);
-        if (stage && stage!=="N.A.") ms.push({stage, month:cs(gi,"E"+r)||"", pct:cs(gi,"F"+r)||"0"});
+      const inv1 = giFind(starts("Invoice 1"));
+      if (inv1) for (let i=0;i<10;i++){
+        const r=inv1.r+i;
+        const lab=gi[EC({r,c:inv1.c})]?.v;
+        if (typeof lab!=="string" || !/^Invoice \d+/.test(lab.trim())) continue;
+        const stage=String(gi[EC({r,c:inv1.c+1})]?.v??"").trim();
+        if (stage && stage!=="N.A.") ms.push({
+          stage,
+          month:String(gi[EC({r,c:inv1.c+2})]?.v??"").trim(),
+          pct:String(gi[EC({r,c:inv1.c+3})]?.v??"0").trim(),
+        });
       }
       if (ms.length) inv.milestones = ms;
 
       // ── Database & Estimate → lines ──
+      // Hardened: columns are FOUND from the header rows (1–4), not assumed.
+      // WBS = "WBS (Activity Code)"; quantity = the "Quantities" /
+      // "Estimate Quantities" header (NOT "Database Quantity" or
+      // "Total Quantity"); factor = "Factor Multiplier".
+      const deRange = XL.utils.decode_range(de["!ref"]||"A1:A1");
+      const maxHdrCol = Math.min(deRange.e.c, 120);
+      const deFindCol = (test, avoid) => {
+        for (let r=0; r<4; r++) for (let c=0; c<=maxHdrCol; c++) {
+          const v = de[EC({r,c})]?.v;
+          if (typeof v!=="string") continue;
+          const t = v.trim().toLowerCase();
+          if (avoid && avoid.some(a=>t.includes(a))) continue;
+          if (test(t)) return c;
+        }
+        return -1;
+      };
+      let wbsCol = deFindCol(t=>t.startsWith("wbs (activity code)") || t==="wbs");
+      if (wbsCol===-1) wbsCol = 3; // col D fallback (v2.x layout)
+      let qtyCol = deFindCol(t=>t.includes("estimate quantities"));
+      if (qtyCol===-1) qtyCol = deFindCol(t=>t==="quantities", ["database","total"]);
+      if (qtyCol===-1) qtyCol = 43; // col AR fallback (v2.x layout)
+      let facCol = deFindCol(t=>t.startsWith("factor multiplier"));
+      if (facCol===-1) facCol = 20; // col U fallback
+
       const known = new Set((snapSupply||[]).map(s=>s.wbs_code));
-      const range = XL.utils.decode_range(de["!ref"]||"A1:A1");
       const lines = {};
       let matched=0, unmatched=0;
-      for (let r=6; r<=range.e.r+1; r++){
-        const wbsc = cv(de,"D"+r);
+      for (let r=5; r<=deRange.e.r; r++){
+        const wbsc = de[EC({r, c:wbsCol})]?.v;
         if (wbsc==null) continue;
         const code = String(wbsc).trim();
-        const qty  = cv(de,"AR"+r);
-        if (typeof qty!=="number" || qty<=1e-6) continue;   // skip blanks & float residue
+        if (!/^\d+(\.\w+)+$/.test(code)) continue;          // header/group noise guard
+        const qty  = de[EC({r, c:qtyCol})]?.v;
+        if (typeof qty!=="number" || qty<=1e-6) continue;     // skip blanks & float residue
         if (!known.has(code)) { unmatched++; continue; }
-        const factor = cv(de,"U"+r);
+        const factor = de[EC({r, c:facCol})]?.v;
         const q = Math.round(qty*10000)/10000;
         lines[code] = { qty:String(q) };
         if (typeof factor==="number" && factor!==1 && factor>0) lines[code].factor = String(factor);
