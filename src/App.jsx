@@ -4287,6 +4287,8 @@ function TemplateLibrary({ onLoad, saved, setSaved, currentInv, currentLines }) 
 }
 
 function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
+  // Resolved pricing context — used to freeze a rate snapshot at the moment of approval
+  const { supply: snapSupply, rates: snapRates } = useData();
   const [hubTab,      setHubTab]      = useState("portfolio");
   const [saved,       setSaved]       = useState([]);
   const [search,      setSearch]      = useState("");
@@ -4352,7 +4354,20 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
 
   const confirmApproval = (id) => {
     if (approvePinVal === APPROVE_PIN) {
-      commitStatus(id, "Approved");
+      // ── Rate snapshot on approval (demo version of Prompt 5D) ──
+      // Freeze the resolved prices and rate table at this moment so the
+      // approved estimate never reprices when master rates/equipment
+      // pricing change later. Never snapshot twice.
+      const target = saved.find(s=>s.id===id);
+      const rateSnapshot = target?.rateSnapshot || {
+        takenAt: new Date().toISOString(),
+        prices: Object.fromEntries((snapSupply||[]).filter(s=>s.pce_price!=null).map(s=>[s.wbs_code, s.pce_price])),
+        rates: JSON.parse(JSON.stringify(snapRates||[])),
+      };
+      const updated = saved.map(s=>s.id===id ? {...s, status:"Approved", rateSnapshot} : s);
+      setSaved(updated);
+      localStorage.setItem("iet_investments", JSON.stringify(updated));
+      setEditStatus(null);
       setApproveModal(null);
       setApprovePinVal("");
       setApprovePinErr(false);
@@ -4395,6 +4410,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       cloned_from_id: cloneSource.id,
       cloned_from_class: cloneSource.inv.estClass,
       inv: { ...cloneSource.inv, estClass: cloneClass },
+      rateSnapshot: undefined, // new version re-prices against CURRENT rates — snapshot stays with the approved original
     };
     const updated = [...saved, promoted];
     setSaved(updated);
@@ -11812,6 +11828,8 @@ export default function App() {
   const [currentRecordId, setCurrentRecordId] = useState(null);
   // Lock state — true when loaded from an Approved record
   const [estimateLocked,  setEstimateLocked]  = useState(false);
+  // Rate snapshot of the currently loaded Approved record (null = live pricing)
+  const [activeSnapshot,  setActiveSnapshot]  = useState(null);
   // Unlock-to-amend modal
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
@@ -11977,6 +11995,7 @@ export default function App() {
     setLastSaved(record.savedAt);
     setCurrentRecordId(record.id || null);
     setEstimateLocked(isApproved);
+    setActiveSnapshot(isApproved ? (record.rateSnapshot || null) : null);
     setAppTab("estimation");
     setEstTab("summary");
     // Clear draft recovery once deliberately loading a record
@@ -12018,6 +12037,7 @@ export default function App() {
       setLastSaved(null);
       setCurrentRecordId(null);
       setEstimateLocked(false);
+      setActiveSnapshot(null);
       setAppTab("estimation");
       setEstTab("setup");
     }
@@ -12032,6 +12052,7 @@ export default function App() {
     setLastSaved(null);
     setCurrentRecordId(null);
     setEstimateLocked(false);
+    setActiveSnapshot(null);
     setPendingNew(false);
     setAppTab("estimation");
     setEstTab("setup");
@@ -12081,6 +12102,7 @@ export default function App() {
     setInv(amendedInv);
     setCurrentRecordId(newId);
     setEstimateLocked(false);
+    setActiveSnapshot(null); // amendment re-prices against current rates
     setShowUnlockModal(false);
     setLastSaved(amendRecord.savedAt);
     setAppTab("estimation");
@@ -12170,6 +12192,15 @@ export default function App() {
   // pce_price in supply. Everything that reads supply (calcLine, EquipmentScreen,
   // Copperleaf export, Equipment Catalogue) automatically picks up the updated price.
   const resolvedSupply = useMemo(() => {
+    // Approved estimate loaded → prices come from the snapshot frozen at
+    // approval, NOT from live equipment pricing / escalation (Prompt 3F).
+    if (activeSnapshot?.prices) {
+      return supplyData.map(item =>
+        activeSnapshot.prices[item.wbs_code] != null
+          ? { ...item, pce_price: activeSnapshot.prices[item.wbs_code] }
+          : item
+      );
+    }
     if (!equipPricing || Object.keys(equipPricing).length === 0) return supplyData;
     return supplyData.map(item => {
       const ep = equipPricing[item.wbs_code];
@@ -12189,7 +12220,7 @@ export default function App() {
       if (escalated == null) return item;
       return { ...item, pce_price: escalated };
     });
-  }, [supplyData, equipPricing]);
+  }, [supplyData, equipPricing, activeSnapshot]);
 
   // ── Resolve equipment pricing into the equipment catalogue items ────────
   const resolvedEquipment = useMemo(() => {
@@ -12215,7 +12246,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-    <DataCtx.Provider value={{wbs:wbsData,rates:ratesData,supply:resolvedSupply,equipment:resolvedEquipment,equipLookup,commLookup,commProfiles,escRates,resourceCodes,equipPricing,invMats,matAssemblies,loading,error}}>
+    <DataCtx.Provider value={{wbs:wbsData,rates:(activeSnapshot?.rates?.length ? activeSnapshot.rates : ratesData),supply:resolvedSupply,equipment:resolvedEquipment,equipLookup,commLookup,commProfiles,escRates,resourceCodes,equipPricing,invMats,matAssemblies,loading,error}}>
       <div className="flex flex-col h-screen font-sans text-sm select-none">
 
         {/* Top nav */}
@@ -12275,6 +12306,7 @@ export default function App() {
                 setLines(draftRecovery.lines||{});
                 setCurrentRecordId(draftRecovery.recordId||null);
                 setEstimateLocked(false);
+                setActiveSnapshot(null);
                 setDraftRecovery(null);
                 localStorage.removeItem("iet_draft_recovery");
                 setAppTab("estimation");
@@ -12297,6 +12329,9 @@ export default function App() {
             <span className="text-base">🔒</span>
             <div className="flex-1 min-w-0">
               <span className="text-xs font-semibold text-green-800">Approved · Rev {inv.revision||"A"} — estimate is locked. </span>
+              {activeSnapshot
+                ? <span className="text-xs font-semibold text-green-800">🧊 Rates frozen at approval ({new Date(activeSnapshot.takenAt).toLocaleDateString("en-AU")}). </span>
+                : <span className="text-xs font-semibold text-amber-700">⚠ Approved before rate snapshots — prices shown are CURRENT rates, not approval-date rates. </span>}
               <span className="text-xs text-green-700">Read-only. Unlock to create a new Draft at Rev {["A","B","C","D","E","F","G","H"][Math.min(["A","B","C","D","E","F","G","H"].indexOf((inv.revision||"A").toUpperCase())+1,7)]} — preserves this approved record.</span>
             </div>
             <button
