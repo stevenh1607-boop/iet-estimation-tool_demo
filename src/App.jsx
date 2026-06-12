@@ -4421,6 +4421,130 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
   };
 
   // Parse imported JSON — accepts a raw IET save blob or minimal JSON
+  const [importBusy, setImportBusy] = useState(false);
+  const [importFileName, setImportFileName] = useState("");
+
+  // Parse an IET estimate workbook (.xlsm/.xlsx) in the browser via SheetJS.
+  // Reads 'General Information' (investment metadata, fixed label/value cells)
+  // and 'Database & Estimate' (WBS col D, estimate quantity col AR, factor col U).
+  const parseWorkbook = async (buf, fileName) => {
+    setImportBusy(true);
+    setImportError("");
+    setImportPreview(null);
+    try {
+      if (!window.XLSX) {
+        await new Promise((res,rej)=>{
+          const s=document.createElement("script");
+          s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+          s.onload=res; s.onerror=rej; document.head.appendChild(s);
+        });
+      }
+      const XL = window.XLSX;
+      const wbk = XL.read(buf, { type:"array", cellStyles:false, sheets:["General Information","Database & Estimate"] });
+      const gi = wbk.Sheets["General Information"];
+      const de = wbk.Sheets["Database & Estimate"];
+      if (!gi || !de) { setImportError("Workbook doesn't look like an IET estimate — needs 'General Information' and 'Database & Estimate' sheets."); setImportBusy(false); return; }
+      const cv = (sheet,addr)=>{ const c=sheet[addr]; return c==null?undefined:c.v; };
+      const cs = (sheet,addr)=>{ const v=cv(sheet,addr); return v==null?"":String(v).trim(); };
+
+      // ── General Information → inv ──
+      const inv = { ...defaultInv };
+      inv.name        = cs(gi,"D4") || "Imported Estimate";
+      inv.number      = cs(gi,"D5");
+      inv.wacs        = cs(gi,"D6") || "N/A";
+      inv.startMonth  = cs(gi,"D7") || inv.startMonth;
+      inv.startYear   = cs(gi,"E7") || inv.startYear;
+      inv.estimatedBy = cs(gi,"D9") || inv.estimatedBy;
+      inv.reviewedBy  = cs(gi,"D10")==="TBD" ? "" : (cs(gi,"D10")||"");
+      inv.revision    = cs(gi,"D11") || "A";
+      inv.estClass    = cs(gi,"D12") || "Class 5";
+      inv.type        = cs(gi,"D14") || inv.type;
+      inv.complexity  = cs(gi,"D15") || inv.complexity;
+      inv.newTech     = cs(gi,"D16") || inv.newTech;
+      inv.planStart   = cs(gi,"D21")||"1"; inv.planDur   = cs(gi,"E21")||"4";
+      inv.designStart = cs(gi,"D22")||"1"; inv.designDur = cs(gi,"E22")||"9";
+      inv.constrStart = cs(gi,"D23")||"6"; inv.constrDur = cs(gi,"E23")||"15";
+      const ci = cv(gi,"D40"), cc = cv(gi,"D41");
+      if (typeof ci==="number") inv.contInt  = String(Math.round(ci*1000)/10);
+      if (typeof cc==="number") inv.contComm = String(Math.round(cc*1000)/10);
+      const ms=[];
+      for (let r=29;r<=38;r++){
+        const stage=cs(gi,"D"+r);
+        if (stage && stage!=="N.A.") ms.push({stage, month:cs(gi,"E"+r)||"", pct:cs(gi,"F"+r)||"0"});
+      }
+      if (ms.length) inv.milestones = ms;
+
+      // ── Database & Estimate → lines ──
+      const known = new Set((snapSupply||[]).map(s=>s.wbs_code));
+      const range = XL.utils.decode_range(de["!ref"]||"A1:A1");
+      const lines = {};
+      let matched=0, unmatched=0;
+      for (let r=6; r<=range.e.r+1; r++){
+        const wbsc = cv(de,"D"+r);
+        if (wbsc==null) continue;
+        const code = String(wbsc).trim();
+        const qty  = cv(de,"AR"+r);
+        if (typeof qty!=="number" || qty<=1e-6) continue;   // skip blanks & float residue
+        if (!known.has(code)) { unmatched++; continue; }
+        const factor = cv(de,"U"+r);
+        const q = Math.round(qty*10000)/10000;
+        lines[code] = { qty:String(q) };
+        if (typeof factor==="number" && factor!==1 && factor>0) lines[code].factor = String(factor);
+        matched++;
+      }
+
+      // Totals for the hub list display
+      let totalEE=0, totalComm=0;
+      const isComm = inv.type==="Commercially Funded";
+      (snapSupply||[]).forEach(item=>{
+        const ln=lines[item.wbs_code];
+        if(!ln) return;
+        const c=calcLine(item, ln.qty, ln.factor||"1", undefined, undefined, undefined, undefined, undefined, isComm, undefined, null, 0);
+        totalEE+=c.eeInt; totalComm+=c.comm;
+      });
+
+      setImportPreview({
+        inv, lines,
+        linesCount: matched,
+        totalSupplyLines: (snapSupply||[]).length,
+        totalEE, totalComm,
+        status:"Draft",
+        _importSource:"excel",
+        _importFile:fileName,
+        _importUnmatched:unmatched,
+      });
+    } catch(e) {
+      setImportError("Could not read workbook: "+e.message);
+    }
+    setImportBusy(false);
+  };
+
+  const handleImportFile = (file) => {
+    if (!file) return;
+    setImportFileName(file.name);
+    setImportError("");
+    setImportPreview(null);
+    if (/\.json$/i.test(file.name)) {
+      file.text().then(t=>{ setImportText(t); parseImport(t); });
+    } else if (/\.(xlsx|xlsm)$/i.test(file.name)) {
+      file.arrayBuffer().then(buf=>parseWorkbook(buf, file.name));
+    } else {
+      setImportError("Unsupported file type — use a .xlsm/.xlsx IET estimate workbook or a .json IET export.");
+    }
+  };
+
+  // Download a saved record as IET JSON (round-trips through Import)
+  const exportJSON = (rec) => {
+    const clean = { ...rec };
+    delete clean._editingBy;
+    const blob = new Blob([JSON.stringify(clean,null,2)],{type:"application/json"});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `IET_${(rec.inv?.number||"estimate")}_Rev${rec.inv?.revision||"A"}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const parseImport = (text) => {
     setImportError("");
     setImportPreview(null);
@@ -4905,6 +5029,8 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             <div className="flex gap-2">
               <button onClick={()=>exportPDF(selected)}
                 className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-[var(--primary-400)]">📄 Export PDF</button>
+              <button onClick={()=>exportJSON(selected)}
+                className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50 hover:border-[var(--primary-400)]">⬇ Export JSON</button>
               <button className="flex-1 border border-gray-200 text-gray-600 text-xs py-1.5 rounded hover:bg-gray-50">☁️ Copperleaf</button>
               <button onClick={(e)=>startDelete(selected,e)}
                 className="border border-red-200 text-red-500 text-xs px-2 py-1.5 rounded hover:bg-red-50 flex items-center gap-1" title="Delete investment">🗑 Delete</button>
@@ -5114,6 +5240,20 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             {!importPreview ? (
               <>
                 <div className="mb-3">
+                  <label className="text-xs text-gray-500 block mb-1">Estimate file (.xlsm / .xlsx IET workbook, or .json IET export)</label>
+                  <label
+                    onDragOver={e=>e.preventDefault()}
+                    onDrop={e=>{e.preventDefault(); handleImportFile(e.dataTransfer.files?.[0]);}}
+                    className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 hover:border-[var(--primary-400)] rounded-lg py-5 cursor-pointer text-center transition-colors">
+                    <span className="text-2xl mb-1">{importBusy?"⏳":"📂"}</span>
+                    <span className="text-xs font-semibold text-gray-600">{importBusy?"Reading workbook…":(importFileName||"Drop estimate file here or click to browse")}</span>
+                    <span className="text-xs text-gray-400 mt-0.5">Reads 'General Information' + 'Database &amp; Estimate' quantities</span>
+                    <input type="file" accept=".xlsm,.xlsx,.json" className="hidden"
+                      onChange={e=>handleImportFile(e.target.files?.[0])}/>
+                  </label>
+                </div>
+                <div className="text-xs text-gray-400 text-center mb-3">— or —</div>
+                <div className="mb-3">
                   <label className="text-xs text-gray-500 block mb-1">Paste saved estimate JSON</label>
                   <textarea
                     value={importText}
@@ -5126,7 +5266,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                   <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2 mb-3">⚠ {importError}</div>
                 )}
                 <div className="text-xs text-gray-400 bg-amber-50 border border-amber-100 rounded p-2 mb-4">
-                  💡 To export a saved estimate: open it from the Investment Hub → Save tab, then use your browser's developer tools or the app's export function to copy the JSON. In the full Power Platform build this will connect directly to Dataverse.
+                  💡 Excel import maps the workbook's General Information to Investment Setup and brings in every entered quantity (column AR of Database &amp; Estimate). JSON import round-trips with the ⬇ Export JSON button on any saved estimate. In the Power Platform build this connects directly to Dataverse.
                 </div>
                 <div className="flex gap-3">
                   <button onClick={()=>{setShowImport(false);setImportText("");setImportError("");}}
@@ -5140,7 +5280,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             ) : (
               <>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                  <div className="text-xs font-bold text-green-700 mb-2">✓ Valid estimate found</div>
+                  <div className="text-xs font-bold text-green-700 mb-2">✓ Valid estimate found{importPreview._importSource==="excel" && <span className="font-normal text-green-600"> — parsed from {importPreview._importFile}</span>}</div>
                   {[
                     ["Investment Name",  importPreview.inv?.name||"—"],
                     ["Number",           importPreview.inv?.number||"—"],
@@ -5157,7 +5297,12 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-gray-400 mb-4">The estimate will be added to your Investment Hub as a new entry. All existing estimates are unchanged.</div>
+                {importPreview._importUnmatched>0 && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3">
+                    ⚠ {importPreview._importUnmatched} WBS code(s) in the workbook were not recognised against the current WBS master and were skipped. Usually superseded or custom codes — review the source workbook if the line count looks low.
+                  </div>
+                )}
+                <div className="text-xs text-gray-400 mb-4">The estimate will be added to your Investment Hub as a new Draft. All existing estimates are unchanged.</div>
                 <div className="flex gap-3">
                   <button onClick={()=>{ setImportPreview(null); }}
                     className="flex-1 border border-gray-200 text-gray-600 text-sm py-2 rounded-lg hover:bg-gray-50">← Back</button>
