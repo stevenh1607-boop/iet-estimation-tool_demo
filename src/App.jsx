@@ -4621,7 +4621,17 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
         const comment = typeof rawCom==="string" ? rawCom.trim() : "";
         const hasQty  = typeof qty==="number" && qty>1e-6;     // float-residue guard
         if (!hasQty && !comment) continue;
-        if (!known.has(code)) { if(hasQty) unmatched++; continue; }
+        if (!known.has(code)) {
+          // Not a supply-item WBS code — check direct-entry commissioning
+          // rows (e.g. SCADA RTU Cubicle, Misc Works), which have no
+          // database hours and are entered as a quantity per investment.
+          const cd = (snapCommLookup||{})[code];
+          if (cd?.direct_entry && hasQty){
+            lines[`comm_direct_${code}`] = { qty: String(Math.round(qty*10000)/10000), _commOvrd:true };
+            commDirectCount++;
+          } else if (hasQty) unmatched++;
+          continue;
+        }
         const item = itemByCode.get(code);
         const entry = lines[code] || {};
         if (hasQty){
@@ -4677,6 +4687,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
         linesCount: matched,
         commentCount,
         overrideCount,
+        commDirectCount,
         totalSupplyLines: (snapSupply||[]).length,
         totalEE, totalComm,
         status:"Draft",
@@ -5461,6 +5472,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
                     ["Lines",            importPreview.linesCount!=null ? `${importPreview.linesCount} entered` : "—"],
                     ["Estimator Comments",importPreview.commentCount!=null ? `${importPreview.commentCount} imported` : "—"],
                     ["Hrs/Cost Overrides", importPreview.overrideCount!=null ? `${importPreview.overrideCount} imported` : "—"],
+                    ["Direct-Entry Commissioning", importPreview.commDirectCount!=null ? `${importPreview.commDirectCount} imported` : "—"],
                     ["EE Internal",      importPreview.totalEE!=null ? fmt(importPreview.totalEE) : "—"],
                     ["Commercial",       importPreview.totalComm!=null ? fmt(importPreview.totalComm) : "—"],
                   ].map(([label,val])=>(
