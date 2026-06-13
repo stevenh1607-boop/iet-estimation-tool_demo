@@ -4609,7 +4609,29 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
       const itemByCode = new Map((snapSupply||[]).map(s=>[s.wbs_code,s]));
       const known = itemByCode;
       const lines = {};
-      let matched=0, unmatched=0, commentCount=0, overrideCount=0;
+      let matched=0, unmatched=0, commentCount=0, overrideCount=0, commDirectCount=0;
+
+      // ── Import report — plain-text log for comparing against the source ──
+      const rpt = { gi:[], qty:[], comments:[], overrides:[], commDirect:[], unmatched:[] };
+      rpt.gi.push(["Investment Name",        inv.name]);
+      rpt.gi.push(["Investment No.",         inv.number]);
+      rpt.gi.push(["WACS No.",               inv.wacs]);
+      rpt.gi.push(["Start",                  `${inv.startMonth} ${inv.startYear}`]);
+      rpt.gi.push(["Estimated By",           inv.estimatedBy]);
+      rpt.gi.push(["Reviewed By",            inv.reviewedBy||"(blank — was TBD)"]);
+      rpt.gi.push(["Revision",               inv.revision]);
+      rpt.gi.push(["Estimate Class",         inv.estClass]);
+      rpt.gi.push(["Investment Type",        inv.type]);
+      rpt.gi.push(["Complexity",             inv.complexity]);
+      rpt.gi.push(["Use of New Technology",  inv.newTech]);
+      rpt.gi.push(["Planning Phase (start/dur)",     `${inv.planStart} / ${inv.planDur}`]);
+      rpt.gi.push(["Design Phase (start/dur)",       `${inv.designStart} / ${inv.designDur}`]);
+      rpt.gi.push(["Construction Phase (start/dur)", `${inv.constrStart} / ${inv.constrDur}`]);
+      rpt.gi.push(["Contingency — Internal",  inv.contInt+"%"]);
+      rpt.gi.push(["Contingency — Commercial",inv.contComm+"%"]);
+      rpt.gi.push(["Milestones",              inv.milestones?.length ? `${inv.milestones.length} found` : "none found"]);
+      (inv.milestones||[]).forEach(m=>rpt.gi.push(["  · "+m.stage.slice(0,60), `month ${m.month} · ${m.pct}%`]));
+
       for (let r=5; r<=deRange.e.r; r++){
         const wbsc = de[EC({r, c:wbsCol})]?.v;
         if (wbsc==null) continue;
@@ -4629,7 +4651,8 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           if (cd?.direct_entry && hasQty){
             lines[`comm_direct_${code}`] = { qty: String(Math.round(qty*10000)/10000), _commOvrd:true };
             commDirectCount++;
-          } else if (hasQty) unmatched++;
+            rpt.commDirect.push([code, cd.description||"", qty]);
+          } else if (hasQty) { unmatched++; rpt.unmatched.push([code, qty]); }
           continue;
         }
         const item = itemByCode.get(code);
@@ -4639,6 +4662,7 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           const factor = de[EC({r, c:facCol})]?.v;
           if (typeof factor==="number" && factor!==1 && factor>0) entry.factor = String(factor);
           matched++;
+          rpt.qty.push([code, item.description||"", entry.qty, entry.factor||"1"]);
 
           // ── Per-row overrides — only set when the workbook value
           // genuinely differs from the database default, so unedited
@@ -4647,16 +4671,23 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
           const eeHrs = de[EC({r, c:eeHrsCol})]?.v;
           if (typeof eeHrs==="number" && eeHrs>EPS){
             const dbHrs = item.install_hrs_per!=null ? item.install_hrs_per : (item.ee_unit_hrs||0);
-            if (Math.abs(eeHrs-dbHrs)>EPS){ entry.instHrsOvrd = String(Math.round(eeHrs*10000)/10000); overrideCount++; }
+            if (Math.abs(eeHrs-dbHrs)>EPS){
+              entry.instHrsOvrd = String(Math.round(eeHrs*10000)/10000); overrideCount++;
+              rpt.overrides.push([code, item.description||"", "EE Unit Labour Hours (col Z)", dbHrs, eeHrs]);
+            }
           }
           const cRate = de[EC({r, c:cRateCol})]?.v;
           if (typeof cRate==="number" && cRate>EPS){
             const dbRate = item.contractor_rate||0;
-            if (Math.abs(cRate-dbRate)>0.005){ entry.contrRate = String(Math.round(cRate*100)/100); overrideCount++; }
+            if (Math.abs(cRate-dbRate)>0.005){
+              entry.contrRate = String(Math.round(cRate*100)/100); overrideCount++;
+              rpt.overrides.push([code, item.description||"", "Contractor Unit Rate (col X)", dbRate, cRate]);
+            }
           }
           const plant = de[EC({r, c:plantCol})]?.v;
           if (typeof plant==="number" && plant>EPS){
             entry.plant = String(Math.round(plant*100)/100); overrideCount++;  // no database default — always project-specific
+            rpt.overrides.push([code, item.description||"", "Plant/Machinery Cost (col AE)", "(no db default)", plant]);
           }
           const matsUnit = de[EC({r, c:matsCol})]?.v;  // per-unit, same basis as pce_price (escalated)
           if (typeof matsUnit==="number" && matsUnit>EPS){
@@ -4665,10 +4696,16 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             // extract date and the estimate's start date — only flag as an
             // override if the workbook price diverges beyond that band.
             const tolerance = Math.max(dbPce*0.15, 0.50);
-            if (dbPce<=0 || Math.abs(matsUnit-dbPce)>tolerance){ entry.mats = String(Math.round(matsUnit*100)/100); overrideCount++; }
+            if (dbPce<=0 || Math.abs(matsUnit-dbPce)>tolerance){
+              entry.mats = String(Math.round(matsUnit*100)/100); overrideCount++;
+              rpt.overrides.push([code, item.description||"", "Materials Cost per unit (col AG)", dbPce, matsUnit]);
+            }
           }
         }
-        if (comment){ entry.comments = comment; commentCount++; }  // methodology notes — incl. rows without qty
+        if (comment){
+          entry.comments = comment; commentCount++;  // methodology notes — incl. rows without qty
+          rpt.comments.push([code, hasQty?(item?.description||""):"(no quantity entered)", comment]);
+        }
         lines[code] = entry;
       }
 
@@ -4682,12 +4719,70 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
         totalEE+=c.eeInt; totalComm+=c.comm;
       });
 
+      // ── Render the report as plain text ──
+      const L=[];
+      const hr=()=>L.push("-".repeat(78));
+      const sec=(title)=>{ L.push(""); L.push("="+("=".repeat(76))); L.push(title); L.push("="+("=".repeat(76))); };
+      const fmtN=v=>typeof v==="number"?(Math.round(v*10000)/10000).toLocaleString("en-AU"):v;
+      L.push("IET ESTIMATE IMPORT REPORT");
+      L.push("Source file: "+fileName);
+      L.push("Parsed:      "+new Date().toLocaleString("en-AU"));
+      L.push("Columns detected — WBS:"+XL.utils.encode_col(wbsCol)+" Qty:"+XL.utils.encode_col(qtyCol)+" Factor:"+XL.utils.encode_col(facCol)
+            +" Comments:"+XL.utils.encode_col(comCol)+" EE Hrs:"+XL.utils.encode_col(eeHrsCol)+" Contr Rate:"+XL.utils.encode_col(cRateCol)
+            +" Plant:"+XL.utils.encode_col(plantCol)+" Materials:"+XL.utils.encode_col(matsCol));
+
+      sec("GENERAL INFORMATION → INVESTMENT SETUP");
+      rpt.gi.forEach(([k,v])=>L.push(k.padEnd(32)+": "+v));
+
+      sec(`QUANTITY LINES — ${rpt.qty.length} of ${(snapSupply||[]).length} supply items`);
+      L.push("WBS Code".padEnd(18)+"Qty".padStart(10)+"  Factor".padEnd(8)+"  Description");
+      hr();
+      rpt.qty.forEach(([code,desc,qty,fac])=>L.push(code.padEnd(18)+fmtN(qty).padStart(10)+"  "+String(fac).padEnd(8)+"  "+desc.slice(0,70)));
+
+      sec(`HOURS / COST OVERRIDES — ${rpt.overrides.length} (workbook value differs from database default)`);
+      L.push("WBS Code".padEnd(18)+"Field".padEnd(32)+"DB Default".padStart(14)+"  Workbook Value".padStart(16)+"  Description");
+      hr();
+      rpt.overrides.forEach(([code,desc,field,oldV,newV])=>
+        L.push(code.padEnd(18)+field.padEnd(32)+fmtN(oldV).toString().padStart(14)+("  "+fmtN(newV)).padStart(16)+"  "+desc.slice(0,50)));
+
+      sec(`DIRECT-ENTRY COMMISSIONING — ${rpt.commDirect.length}`);
+      L.push("WBS Code".padEnd(18)+"Qty".padStart(6)+"  Description");
+      hr();
+      rpt.commDirect.forEach(([code,desc,qty])=>L.push(code.padEnd(18)+fmtN(qty).toString().padStart(6)+"  "+desc.slice(0,70)));
+
+      sec(`ESTIMATOR COMMENTS — ${rpt.comments.length}`);
+      rpt.comments.forEach(([code,desc,comment])=>{
+        L.push(code+"  "+desc.slice(0,60));
+        comment.split(/\r?\n/).forEach(line=>L.push("    "+line));
+        L.push("");
+      });
+
+      sec(`UNMATCHED CODES — ${rpt.unmatched.length} (had a quantity but no match in WBS master or commissioning lookup)`);
+      L.push("These were SKIPPED. Usually superseded, custom, or relocated codes —");
+      L.push("check the source workbook against the current WBS master if expected.");
+      hr();
+      rpt.unmatched.forEach(([code,qty])=>L.push(code.padEnd(18)+fmtN(qty)));
+
+      sec("TOTALS");
+      L.push("Lines with quantity:         "+matched);
+      L.push("Estimator comments:          "+commentCount);
+      L.push("Hours/cost overrides:        "+overrideCount);
+      L.push("Direct-entry commissioning:  "+commDirectCount);
+      L.push("Unmatched codes:             "+unmatched);
+      L.push("");
+      L.push("Computed Base Estimate (EE Internal): "+fmt(totalEE));
+      L.push("Computed Base Estimate (Commercial):  "+fmt(totalComm));
+      L.push("");
+      L.push("Compare these totals and counts against the source workbook's Summary");
+      L.push("sheet and Database & Estimate tab to confirm nothing was missed.");
+
       setImportPreview({
         inv, lines,
         linesCount: matched,
         commentCount,
         overrideCount,
         commDirectCount,
+        importReport: L.join("\n"),
         totalSupplyLines: (snapSupply||[]).length,
         totalEE, totalComm,
         status:"Draft",
@@ -5462,7 +5557,21 @@ function InvestmentHub({ onLoad, onNew, currentInv, currentLines }) {
             ) : (
               <>
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
-                  <div className="text-xs font-bold text-green-700 mb-2">✓ Valid estimate found{importPreview._importSource==="excel" && <span className="font-normal text-green-600"> — parsed from {importPreview._importFile}</span>}</div>
+                  <div className="text-xs font-bold text-green-700 mb-2 flex items-center justify-between">
+                    <span>✓ Valid estimate found{importPreview._importSource==="excel" && <span className="font-normal text-green-600"> — parsed from {importPreview._importFile}</span>}</span>
+                    {importPreview.importReport && (
+                      <button onClick={()=>{
+                        const blob=new Blob([importPreview.importReport],{type:"text/plain"});
+                        const a=document.createElement("a");
+                        a.href=URL.createObjectURL(blob);
+                        a.download=`IET_Import_Report_${(importPreview.inv?.number||"estimate")}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                      }} className="text-xs border border-green-300 bg-white hover:bg-green-50 text-green-700 px-2 py-1 rounded font-semibold">
+                        ⬇ Download Import Report (.txt)
+                      </button>
+                    )}
+                  </div>
                   {[
                     ["Investment Name",  importPreview.inv?.name||"—"],
                     ["Number",           importPreview.inv?.number||"—"],
